@@ -1,0 +1,165 @@
+<?php
+
+namespace AdminIntelligence\LogShipper\Logging;
+
+use AdminIntelligence\LogShipper\Jobs\ShipLogJob;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Request;
+use Illuminate\Support\Facades\Route;
+use Monolog\Handler\AbstractProcessingHandler;
+use Monolog\Level;
+use Monolog\LogRecord;
+
+class LogShipperHandler extends AbstractProcessingHandler
+{
+    public function __construct(Level $level = Level::Error, bool $bubble = true)
+    {
+        parent::__construct($level, $bubble);
+    }
+
+    protected function write(LogRecord $record): void
+    {
+        if (!config('log-shipper.enabled', true)) {
+            return;
+        }
+
+        $payload = $this->buildPayload($record);
+        $sanitizedPayload = $this->sanitize($payload);
+
+        $connection = config('log-shipper.queue_connection', 'default');
+        $queue = config('log-shipper.queue_name', 'default');
+
+        if ($connection === 'default') {
+            $connection = config('queue.default');
+        }
+
+        ShipLogJob::dispatch($sanitizedPayload)
+            ->onConnection($connection)
+            ->onQueue($queue);
+    }
+
+    protected function buildPayload(LogRecord $record): array
+    {
+        $contextConfig = config('log-shipper.send_context', []);
+
+        $payload = [
+            'level' => strtolower($record->level->name),
+            'message' => $record->message,
+            'context' => $record->context,
+            'datetime' => $record->datetime->format('Y-m-d H:i:s.u'),
+            'channel' => $record->channel,
+            'extra' => $record->extra,
+        ];
+
+        // Add request context if available and configured
+        if ($this->shouldSendContext('user_id', $contextConfig)) {
+            $payload['user_id'] = $this->safeGetUserId();
+        }
+
+        if ($this->shouldSendContext('ip_address', $contextConfig)) {
+            $payload['ip_address'] = $this->safeGetRequestData('ip');
+        }
+
+        if ($this->shouldSendContext('user_agent', $contextConfig)) {
+            $payload['user_agent'] = $this->safeGetRequestData('userAgent');
+        }
+
+        if ($this->shouldSendContext('request_method', $contextConfig)) {
+            $payload['request_method'] = $this->safeGetRequestData('method');
+        }
+
+        if ($this->shouldSendContext('request_url', $contextConfig)) {
+            $payload['request_url'] = $this->safeGetRequestData('fullUrl');
+        }
+
+        if ($this->shouldSendContext('route_name', $contextConfig)) {
+            $payload['route_name'] = $this->safeGetRouteData('name');
+        }
+
+        if ($this->shouldSendContext('controller_action', $contextConfig)) {
+            $payload['controller_action'] = $this->safeGetRouteData('action');
+        }
+
+        return $payload;
+    }
+
+    protected function shouldSendContext(string $key, array $config): bool
+    {
+        return $config[$key] ?? false;
+    }
+
+    protected function safeGetUserId(): ?int
+    {
+        try {
+            return Auth::id();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    protected function safeGetRequestData(string $type): ?string
+    {
+        try {
+            return match ($type) {
+                'ip' => Request::ip(),
+                'userAgent' => Request::userAgent(),
+                'method' => Request::method(),
+                'fullUrl' => Request::fullUrl(),
+                default => null,
+            };
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    protected function safeGetRouteData(string $type): ?string
+    {
+        try {
+            $route = Route::current();
+            if (!$route) {
+                return null;
+            }
+
+            return match ($type) {
+                'name' => $route->getName(),
+                'action' => $route->getActionName(),
+                default => null,
+            };
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    protected function sanitize(array $data): array
+    {
+        $sensitiveFields = config('log-shipper.sanitize_fields', []);
+
+        return $this->sanitizeRecursive($data, $sensitiveFields);
+    }
+
+    protected function sanitizeRecursive(array $data, array $sensitiveFields): array
+    {
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                $data[$key] = $this->sanitizeRecursive($value, $sensitiveFields);
+            } elseif ($this->isSensitiveKey($key, $sensitiveFields)) {
+                $data[$key] = '[REDACTED]';
+            }
+        }
+
+        return $data;
+    }
+
+    protected function isSensitiveKey(string $key, array $sensitiveFields): bool
+    {
+        $lowerKey = strtolower($key);
+
+        foreach ($sensitiveFields as $field) {
+            if (str_contains($lowerKey, strtolower($field))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}

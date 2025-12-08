@@ -1,0 +1,74 @@
+<?php
+
+namespace AdminIntelligence\LogShipper\Jobs;
+
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+
+class ShipLogJob implements ShouldQueue
+{
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    /**
+     * Do not retry if the log server is down.
+     * We don't want to clog the queue with failed log attempts.
+     */
+    public int $tries = 1;
+
+    /**
+     * The job may be attempted for up to 10 seconds.
+     */
+    public int $timeout = 10;
+
+    /**
+     * Delete the job if its models no longer exist.
+     */
+    public bool $deleteWhenMissingModels = true;
+
+    public function __construct(
+        protected array $payload
+    ) {}
+
+    public function handle(): void
+    {
+        $endpoint = config('log-shipper.api_endpoint');
+        $apiKey = config('log-shipper.api_key');
+
+        if (empty($endpoint) || empty($apiKey)) {
+            // Silently fail - we don't want to log about failing to log
+            return;
+        }
+
+        try {
+            Http::timeout(10)
+                ->withHeaders([
+                    'Accept' => 'application/json',
+                    'Content-Type' => 'application/json',
+                    'X-Project-Key' => $apiKey,
+                ])
+                ->post($endpoint, $this->payload);
+
+            // We intentionally don't check the response.
+            // If it fails, it fails. Life goes on. Probably.
+        } catch (\Throwable) {
+            // Fail silently. The irony of a log shipper failing to log
+            // its own failures is not lost on us.
+        }
+    }
+
+    /**
+     * Handle a job failure.
+     * Spoiler: We do nothing. That's the point.
+     */
+    public function failed(?\Throwable $exception): void
+    {
+        // Intentionally empty.
+        // If we can't ship logs, we certainly can't ship logs about
+        // failing to ship logs. That way lies madness.
+    }
+}
