@@ -80,6 +80,18 @@ class LogShipperHandler extends AbstractProcessingHandler
             $payload['controller_action'] = $this->safeGetRouteData('action');
         }
 
+        if ($this->shouldSendContext('app_env', $contextConfig)) {
+            $payload['app_env'] = config('app.env');
+        }
+
+        if ($this->shouldSendContext('app_debug', $contextConfig)) {
+            $payload['app_debug'] = config('app.debug');
+        }
+
+        if ($this->shouldSendContext('referrer', $contextConfig)) {
+            $payload['referrer'] = $this->safeGetRequestData('referrer');
+        }
+
         return $payload;
     }
 
@@ -105,6 +117,7 @@ class LogShipperHandler extends AbstractProcessingHandler
                 'userAgent' => Request::userAgent(),
                 'method' => Request::method(),
                 'fullUrl' => Request::fullUrl(),
+                'referrer' => Request::header('referer'),
                 default => null,
             };
         } catch (\Throwable) {
