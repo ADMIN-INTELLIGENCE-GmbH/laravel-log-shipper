@@ -100,10 +100,11 @@ class LogShipperHandler extends AbstractProcessingHandler
         return $config[$key] ?? false;
     }
 
-    protected function safeGetUserId(): ?int
+    protected function safeGetUserId(): ?string
     {
         try {
-            return Auth::id();
+            $id = Auth::id();
+            return $id !== null ? (string) $id : null;
         } catch (\Throwable) {
             return null;
         }
