@@ -90,5 +90,8 @@ return [
         'controller_action' => true,
         'request_method' => true,
         'request_url' => true,
+        'app_env' => true,
+        'app_debug' => true,
+        'referrer' => true,
     ],
 ];
