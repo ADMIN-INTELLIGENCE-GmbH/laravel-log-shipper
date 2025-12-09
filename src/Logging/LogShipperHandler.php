@@ -104,6 +104,7 @@ class LogShipperHandler extends AbstractProcessingHandler
     {
         try {
             $id = Auth::id();
+
             return $id !== null ? (string) $id : null;
         } catch (\Throwable) {
             return null;
