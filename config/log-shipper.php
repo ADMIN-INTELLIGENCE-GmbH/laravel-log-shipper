@@ -20,7 +20,7 @@ return [
     | The URL where your logs will be sent to meet their fate.
     |
     */
-    'api_endpoint' => env('LOG_SHIPPER_ENDPOINT', 'https://your-log-server.com/api/logs'),
+    'api_endpoint' => env('LOG_SHIPPER_ENDPOINT', ''),
 
     /*
     |--------------------------------------------------------------------------

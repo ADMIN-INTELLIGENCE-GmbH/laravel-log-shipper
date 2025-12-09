@@ -8,7 +8,6 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 
 class ShipLogJob implements ShouldQueue
 {
@@ -21,14 +20,15 @@ class ShipLogJob implements ShouldQueue
     public int $tries = 1;
 
     /**
-     * The job may be attempted for up to 10 seconds.
+     * The job may be attempted for up to 15 seconds.
      */
-    public int $timeout = 10;
+    public int $timeout = 15;
 
     /**
-     * Delete the job if its models no longer exist.
+     * HTTP request timeout in seconds.
+     * Must be less than job timeout to allow for cleanup.
      */
-    public bool $deleteWhenMissingModels = true;
+    protected int $httpTimeout = 10;
 
     public function __construct(
         protected array $payload
@@ -45,7 +45,7 @@ class ShipLogJob implements ShouldQueue
         }
 
         try {
-            Http::timeout(10)
+            Http::timeout($this->httpTimeout)
                 ->withHeaders([
                     'Accept' => 'application/json',
                     'Content-Type' => 'application/json',

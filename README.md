@@ -1,6 +1,16 @@
 # Laravel Log Shipper
 
-A Laravel package that ships your application logs to a central server. Because sometimes you need your problems to be someone else's problems too.
+[![Tests](https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/actions/workflows/tests.yml/badge.svg)](https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/actions/workflows/tests.yml)
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/adminintelligence/laravel-log-shipper.svg)](https://packagist.org/packages/adminintelligence/laravel-log-shipper)
+[![License](https://img.shields.io/packagist/l/adminintelligence/laravel-log-shipper.svg)](https://packagist.org/packages/adminintelligence/laravel-log-shipper)
+
+A Laravel package that ships your application logs to a central server.
+
+## Requirements
+
+- PHP 8.1 or higher
+- Laravel 10, 11, or 12
+- A queue driver (recommended: Redis, database, or SQS)
 
 ## Installation
 
@@ -18,7 +28,7 @@ php artisan vendor:publish --tag=log-shipper-config
 
 Add the following to your `.env` file:
 
-```env
+```
 LOG_SHIPPER_ENABLED=true
 LOG_SHIPPER_ENDPOINT=https://your-log-server.com/api/logs
 LOG_SHIPPER_KEY=your-project-api-key
@@ -70,6 +80,24 @@ Log::error('Something went wrong', ['order_id' => 123]);
 
 The package automatically redacts sensitive fields from your logs. Configure which fields to sanitize in the config file.
 
+## Sync Mode
+
+By default, logs are shipped via queued jobs for better performance. If you prefer synchronous shipping (useful for debugging or simple setups), set:
+
+```env
+LOG_SHIPPER_QUEUE=sync
+```
+
+> **Note:** Sync mode will block your application until the HTTP request completes. Use queued mode in production for better performance.
+
+## Contributing
+
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+## Security
+
+If you discover a security vulnerability, please see [SECURITY.md](SECURITY.md) for reporting instructions.
+
 ## License
 
-MIT
+The MIT License (MIT). Please see [LICENSE](LICENSE) for more information.

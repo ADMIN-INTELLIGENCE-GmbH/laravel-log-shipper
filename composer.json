@@ -3,24 +3,60 @@
     "description": "Ships your Laravel logs to a central server. Because local problems deserve global visibility.",
     "type": "library",
     "license": "MIT",
+    "keywords": [
+        "laravel",
+        "logging",
+        "monolog",
+        "log-shipper",
+        "centralized-logging"
+    ],
+    "homepage": "https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper",
+    "support": {
+        "issues": "https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/issues",
+        "source": "https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper",
+        "homepage": "https://admin-intelligence.de",
+        "email": "support@admin-intelligence.de"
+    },
     "autoload": {
         "psr-4": {
             "AdminIntelligence\\LogShipper\\": "src/"
         }
     },
+    "autoload-dev": {
+        "psr-4": {
+            "AdminIntelligence\\LogShipper\\Tests\\": "tests/"
+        }
+    },
     "authors": [
         {
-            "name": "AdminIntelligence",
-            "email": "dev@adminintelligence.com"
+            "name": "Julian Billinger",
+            "email": "julian.billinger@admin-intelligence.com"
         }
     ],
     "minimum-stability": "dev",
     "prefer-stable": true,
     "require": {
         "php": "^8.1",
+        "ext-json": "*",
         "illuminate/support": "^10.0|^11.0|^12.0",
         "illuminate/http": "^10.0|^11.0|^12.0",
+        "illuminate/queue": "^10.0|^11.0|^12.0",
         "monolog/monolog": "^3.0"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.0",
+        "orchestra/testbench": "^8.0|^9.0|^10.0",
+        "phpunit/phpunit": "^10.0|^11.0"
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit",
+        "test-coverage": "vendor/bin/phpunit --coverage-html coverage",
+        "lint": "vendor/bin/pint",
+        "lint-check": "vendor/bin/pint --test",
+        "preflight": [
+            "@lint-check",
+            "@test"
+        ]
     },
     "extra": {
         "laravel": {
