@@ -9,15 +9,11 @@ use PHPUnit\Framework\Attributes\Test;
 
 class ShipLogJobTest extends TestCase
 {
-    protected function setUp(): void
-    {
-        parent::setUp();
-        Http::fake();
-    }
-
     #[Test]
     public function it_sends_payload_to_configured_endpoint(): void
     {
+        Http::fake();
+
         config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/logs']);
         config(['log-shipper.api_key' => 'test-key']);
 
@@ -42,6 +38,8 @@ class ShipLogJobTest extends TestCase
     #[Test]
     public function it_sends_project_key_header(): void
     {
+        Http::fake();
+
         config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/logs']);
         config(['log-shipper.api_key' => 'my-secret-key']);
 
@@ -56,6 +54,8 @@ class ShipLogJobTest extends TestCase
     #[Test]
     public function it_sends_json_content_type(): void
     {
+        Http::fake();
+
         config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/logs']);
         config(['log-shipper.api_key' => 'test-key']);
 
@@ -70,6 +70,8 @@ class ShipLogJobTest extends TestCase
     #[Test]
     public function it_sends_accept_json_header(): void
     {
+        Http::fake();
+
         config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/logs']);
         config(['log-shipper.api_key' => 'test-key']);
 
@@ -84,6 +86,8 @@ class ShipLogJobTest extends TestCase
     #[Test]
     public function it_does_not_send_when_endpoint_is_empty(): void
     {
+        Http::fake();
+
         config(['log-shipper.api_endpoint' => '']);
         config(['log-shipper.api_key' => 'test-key']);
 
@@ -96,6 +100,8 @@ class ShipLogJobTest extends TestCase
     #[Test]
     public function it_does_not_send_when_api_key_is_empty(): void
     {
+        Http::fake();
+
         config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/logs']);
         config(['log-shipper.api_key' => '']);
 
@@ -153,6 +159,8 @@ class ShipLogJobTest extends TestCase
     #[Test]
     public function it_sends_complete_payload(): void
     {
+        Http::fake();
+
         config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/logs']);
         config(['log-shipper.api_key' => 'test-key']);
 
