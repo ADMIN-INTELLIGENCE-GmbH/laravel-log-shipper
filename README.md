@@ -6,6 +6,20 @@
 
 A Laravel package that ships your application logs to a central server.
 
+## Companion Service: Logger
+
+This package is designed to work with [**Logger**](https://github.com/ADMIN-INTELLIGENCE-GmbH/logger) — a centralized log aggregation service built with Laravel.
+
+**Logger provides:**
+- **Web Dashboard** — Search, filter, and browse logs with pagination
+- **Multi-Project Support** — Manage logs from multiple applications with isolated project keys
+- **Failing Controllers Report** — Identify error hotspots by controller
+- **Retention Policies** — Configurable per-project log retention (7, 14, 30, 90 days, or infinite)
+- **Webhook Notifications** — Slack/Discord/Mattermost-compatible alerts for errors and critical events
+- **Dark Mode** — Full dark theme support
+
+> **Note:** You can also use this package with any HTTP endpoint that accepts JSON log payloads.
+
 ## Requirements
 
 - PHP 8.1 or higher
