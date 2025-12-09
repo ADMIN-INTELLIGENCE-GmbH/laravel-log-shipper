@@ -97,7 +97,7 @@ class LogShippingIntegrationTest extends TestCase
         Log::error('Sync test error');
 
         Http::assertSent(function ($request) {
-            return $request->url() === 'https://test-logs.example.com/api/logs'
+            return $request->url() === 'https://test-logs.example.com/api/ingest'
                 && $request['message'] === 'Sync test error';
         });
     }

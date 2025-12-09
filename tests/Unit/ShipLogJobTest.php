@@ -16,7 +16,7 @@ class ShipLogJobTest extends TestCase
             'https://logs.example.com/*' => Http::response(['status' => 'ok'], 200),
         ]);
 
-        config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/logs']);
+        config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/ingest']);
         config(['log-shipper.api_key' => 'test-key']);
 
         $payload = [
@@ -31,7 +31,7 @@ class ShipLogJobTest extends TestCase
         $job->handle();
 
         Http::assertSent(function ($request) {
-            return $request->url() === 'https://logs.example.com/api/logs'
+            return $request->url() === 'https://logs.example.com/api/ingest'
                 && $request['level'] === 'error'
                 && $request['message'] === 'Test error';
         });
@@ -44,7 +44,7 @@ class ShipLogJobTest extends TestCase
             'https://logs.example.com/*' => Http::response(['status' => 'ok'], 200),
         ]);
 
-        config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/logs']);
+        config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/ingest']);
         config(['log-shipper.api_key' => 'my-secret-key']);
 
         $job = new ShipLogJob(['level' => 'error', 'message' => 'Test']);
@@ -62,7 +62,7 @@ class ShipLogJobTest extends TestCase
             'https://logs.example.com/*' => Http::response(['status' => 'ok'], 200),
         ]);
 
-        config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/logs']);
+        config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/ingest']);
         config(['log-shipper.api_key' => 'test-key']);
 
         $job = new ShipLogJob(['level' => 'error', 'message' => 'Test']);
@@ -80,7 +80,7 @@ class ShipLogJobTest extends TestCase
             'https://logs.example.com/*' => Http::response(['status' => 'ok'], 200),
         ]);
 
-        config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/logs']);
+        config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/ingest']);
         config(['log-shipper.api_key' => 'test-key']);
 
         $job = new ShipLogJob(['level' => 'error', 'message' => 'Test']);
@@ -114,7 +114,7 @@ class ShipLogJobTest extends TestCase
             '*' => Http::response(['status' => 'ok'], 200),
         ]);
 
-        config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/logs']);
+        config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/ingest']);
         config(['log-shipper.api_key' => '']);
 
         $job = new ShipLogJob(['level' => 'error', 'message' => 'Test']);
@@ -142,7 +142,7 @@ class ShipLogJobTest extends TestCase
     #[Test]
     public function it_handles_http_exceptions_silently(): void
     {
-        config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/logs']);
+        config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/ingest']);
         config(['log-shipper.api_key' => 'test-key']);
 
         Http::fake(function () {
@@ -175,7 +175,7 @@ class ShipLogJobTest extends TestCase
             'https://logs.example.com/*' => Http::response(['status' => 'ok'], 200),
         ]);
 
-        config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/logs']);
+        config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/ingest']);
         config(['log-shipper.api_key' => 'test-key']);
 
         $payload = [

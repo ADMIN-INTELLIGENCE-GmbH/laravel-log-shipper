@@ -44,7 +44,7 @@ Add the following to your `.env` file:
 
 ```
 LOG_SHIPPER_ENABLED=true
-LOG_SHIPPER_ENDPOINT=https://your-log-server.com/api/logs
+LOG_SHIPPER_ENDPOINT=https://your-log-server.com/api/ingest
 LOG_SHIPPER_KEY=your-project-api-key
 LOG_SHIPPER_QUEUE=redis
 LOG_SHIPPER_QUEUE_NAME=logs

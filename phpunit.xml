@@ -24,7 +24,7 @@
     <php>
         <env name="APP_ENV" value="testing"/>
         <env name="LOG_SHIPPER_ENABLED" value="true"/>
-        <env name="LOG_SHIPPER_ENDPOINT" value="https://test-logs.example.com/api/logs"/>
+        <env name="LOG_SHIPPER_ENDPOINT" value="https://test-logs.example.com/api/ingest"/>
         <env name="LOG_SHIPPER_KEY" value="test-api-key"/>
     </php>
 </phpunit>
