@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2025-12-11
+
 ### Added
 - **Batch Shipping**: Added support for buffering logs in Redis and shipping them in batches to reduce queue pressure.
 - **Status Monitoring**: Added automatic system health monitoring (CPU, Memory, Disk, Queue, Database) with configurable reporting intervals.
@@ -33,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Request context collection (user ID, IP, user agent, route, etc.)
 - Laravel 10, 11, and 12 support
 
-[Unreleased]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.1.0
 [1.0.1]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.0.1
 [1.0.0]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.0.0
