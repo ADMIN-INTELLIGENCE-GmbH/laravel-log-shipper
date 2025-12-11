@@ -124,11 +124,12 @@ class ShipLogJobTest extends TestCase
     }
 
     #[Test]
-    public function it_has_single_try(): void
+    public function it_has_configurable_tries(): void
     {
+        config(['log-shipper.retries' => 5]);
         $job = new ShipLogJob(['level' => 'error', 'message' => 'Test']);
 
-        $this->assertEquals(1, $job->tries);
+        $this->assertEquals(5, $job->tries());
     }
 
     #[Test]
@@ -140,7 +141,7 @@ class ShipLogJobTest extends TestCase
     }
 
     #[Test]
-    public function it_handles_http_exceptions_silently(): void
+    public function it_rethrows_exceptions_for_retry(): void
     {
         config(['log-shipper.api_endpoint' => 'https://logs.example.com/api/ingest']);
         config(['log-shipper.api_key' => 'test-key']);
@@ -151,10 +152,10 @@ class ShipLogJobTest extends TestCase
 
         $job = new ShipLogJob(['level' => 'error', 'message' => 'Test']);
 
-        // Should not throw an exception
-        $job->handle();
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Connection refused');
 
-        $this->assertTrue(true); // If we get here, the exception was handled
+        $job->handle();
     }
 
     #[Test]

@@ -87,6 +87,9 @@ Log::error('Something went wrong', ['order_id' => 123]);
 | `api_key` | Your project's API key | - |
 | `queue_connection` | Queue connection to use | `default` |
 | `queue_name` | Queue name for log jobs | `default` |
+| `retries` | Number of attempts before failing | `3` |
+| `backoff` | Wait time between retries (seconds) | `[2, 5, 10]` |
+| `circuit_breaker` | Circuit breaker configuration | `enabled` |
 | `fallback_channel` | Local channel to use if shipping fails | `null` |
 | `sanitize_fields` | Fields to redact from logs | See config |
 | `send_context` | Context data to include | See config |
@@ -344,9 +347,38 @@ LOG_SHIPPER_QUEUE=sync
 
 > **Note:** Sync mode will block your application until the HTTP request completes. Use queued mode in production for better performance.
 
+## Reliability & Fault Tolerance
+
+This package includes built-in mechanisms to ensure your application remains stable even if the log server is down.
+
+### Retries & Backoff
+
+If the log server returns a 4xx/5xx error or is unreachable, the job will automatically retry based on your configuration.
+
+```php
+// config/log-shipper.php
+'retries' => 3,
+'backoff' => [2, 5, 10], // Wait 2s, then 5s, then 10s
+```
+
+### Circuit Breaker
+
+To prevent your queue from being flooded with failing jobs during an outage, the Circuit Breaker will temporarily stop dispatching new log jobs.
+
+```php
+// config/log-shipper.php
+'circuit_breaker' => [
+    'enabled' => true,
+    'failure_threshold' => 5, // Open circuit after 5 consecutive failures
+    'duration' => 300, // Keep circuit open for 5 minutes
+],
+```
+
+When the circuit is open, logs are skipped entirely to protect your application's performance.
+
 ## Fallback Channel
 
-If the log shipper fails to send logs (e.g., due to network issues or server downtime), you can configure a fallback channel to ensure logs are not lost.
+If the log shipper fails to send logs (after all retries are exhausted), you can configure a fallback channel to ensure logs are not lost.
 
 Add the following to your `.env` file:
 
@@ -355,6 +387,10 @@ LOG_SHIPPER_FALLBACK=daily
 ```
 
 When a failure occurs, the original log payload will be written to the specified channel, along with failure details in the context.
+
+## Changelog
+
+Please see [CHANGELOG.md](CHANGELOG.md) for more information on what has changed recently.
 
 ## Contributing
 

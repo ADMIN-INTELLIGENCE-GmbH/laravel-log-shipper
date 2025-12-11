@@ -55,6 +55,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Job Retries & Backoff
+    |--------------------------------------------------------------------------
+    |
+    | Configure how many times the job should be attempted and the wait time
+    | between attempts.
+    |
+    */
+    'retries' => 3,
+    'backoff' => [2, 5, 10], // Seconds to wait between retries
+
+    /*
+    |--------------------------------------------------------------------------
     | Fallback Channel
     |--------------------------------------------------------------------------
     |
@@ -63,6 +75,21 @@ return [
     |
     */
     'fallback_channel' => env('LOG_SHIPPER_FALLBACK', null),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Circuit Breaker
+    |--------------------------------------------------------------------------
+    |
+    | Prevent the application from repeatedly trying to ship logs when the
+    | log server is down.
+    |
+    */
+    'circuit_breaker' => [
+        'enabled' => true,
+        'failure_threshold' => 5, // Number of failures before opening the circuit
+        'duration' => 300, // Seconds to keep the circuit open (5 minutes)
+    ],
 
     /*
     |--------------------------------------------------------------------------
