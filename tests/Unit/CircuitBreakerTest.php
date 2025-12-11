@@ -32,7 +32,7 @@ class CircuitBreakerTest extends TestCase
         });
 
         $job = new ShipLogJob(['message' => 'test']);
-        
+
         try {
             $job->handle();
         } catch (\Exception $e) {
@@ -50,12 +50,18 @@ class CircuitBreakerTest extends TestCase
         });
 
         $job = new ShipLogJob(['message' => 'test']);
-        
+
         // Threshold is 2
-        try { $job->handle(); } catch (\Exception $e) {} // 1 failure
+        try {
+            $job->handle();
+        } catch (\Exception $e) {
+        } // 1 failure
         $this->assertFalse(Cache::has('log_shipper_dead_until'));
-        
-        try { $job->handle(); } catch (\Exception $e) {} // 2 failures
+
+        try {
+            $job->handle();
+        } catch (\Exception $e) {
+        } // 2 failures
         $this->assertTrue(Cache::has('log_shipper_dead_until'));
     }
 
@@ -82,7 +88,7 @@ class CircuitBreakerTest extends TestCase
 
         $handler = new LogShipperHandler(Level::Error);
         $record = $this->createLogRecord('Test message', Level::Error);
-        
+
         $handler->handle($record);
 
         Queue::assertNotPushed(ShipLogJob::class);
@@ -96,7 +102,7 @@ class CircuitBreakerTest extends TestCase
 
         $handler = new LogShipperHandler(Level::Error);
         $record = $this->createLogRecord('Test message', Level::Error);
-        
+
         $handler->handle($record);
 
         Queue::assertPushed(ShipLogJob::class);

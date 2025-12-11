@@ -2,7 +2,6 @@
 
 namespace AdminIntelligence\LogShipper\Tests\Feature;
 
-use AdminIntelligence\LogShipper\Buffer\LogBufferInterface;
 use AdminIntelligence\LogShipper\Jobs\ShipBatchJob;
 use AdminIntelligence\LogShipper\Tests\TestCase;
 use Illuminate\Support\Facades\Cache;
@@ -18,7 +17,7 @@ class BatchShippingTest extends TestCase
         parent::setUp();
         Config::set('log-shipper.batch.enabled', true);
         Config::set('log-shipper.batch.buffer_key', 'test_buffer');
-        
+
         // Configure logging to use our channel
         Config::set('logging.default', 'stack');
         Config::set('logging.channels.stack', [
@@ -40,11 +39,12 @@ class BatchShippingTest extends TestCase
         Redis::shouldReceive('connection')
             ->with('default')
             ->andReturnSelf();
-        
+
         Redis::shouldReceive('rpush')
             ->once()
             ->with('test_buffer', \Mockery::on(function ($arg) {
                 $json = json_decode($arg, true);
+
                 return $json['message'] === 'Test batch log';
             }));
 
@@ -58,7 +58,7 @@ class BatchShippingTest extends TestCase
 
         // We can't easily mock Cache facade with locks in a simple way without partial mocks,
         // so we'll rely on the real array cache driver behavior.
-        
+
         Log::error('Test batch log');
 
         $buffer = Cache::store('array')->get('test_buffer');
@@ -74,7 +74,7 @@ class BatchShippingTest extends TestCase
 
         Redis::shouldReceive('connection')
             ->andReturnSelf();
-        
+
         // Mock popping 2 logs then null
         Redis::shouldReceive('lpop')
             ->with('test_buffer')
@@ -108,7 +108,7 @@ class BatchShippingTest extends TestCase
             ->assertExitCode(0);
 
         Queue::assertPushed(ShipBatchJob::class, 1);
-        
+
         // Verify buffer is empty
         $this->assertEmpty(Cache::store('array')->get('test_buffer'));
     }

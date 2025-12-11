@@ -21,7 +21,7 @@ class ShipLogJob implements ShouldQueue
     public function tries(): int
     {
         $tries = config('log-shipper.retries');
-        
+
         return $tries ? (int) $tries : 3;
     }
 
@@ -31,7 +31,7 @@ class ShipLogJob implements ShouldQueue
     public function backoff(): array
     {
         $backoff = config('log-shipper.backoff');
-        
+
         return is_array($backoff) ? $backoff : [2, 5, 10];
     }
 
@@ -78,7 +78,7 @@ class ShipLogJob implements ShouldQueue
             // If it fails, it fails. Life goes on. Probably.
         } catch (\Throwable $e) {
             $this->recordFailure($e);
-            
+
             // Rethrow the exception so the queue worker knows to retry
             throw $e;
         }
@@ -122,7 +122,7 @@ class ShipLogJob implements ShouldQueue
             $level = $this->payload['level'] ?? 'error';
             $message = $this->payload['message'] ?? 'Unknown error';
             $context = $this->payload['context'] ?? [];
-            
+
             // Add metadata about the failure
             $context['log_shipper_failure'] = $exception?->getMessage();
             $context['original_payload'] = $this->payload;
@@ -135,8 +135,8 @@ class ShipLogJob implements ShouldQueue
         } catch (\Throwable) {
             // If the fallback fails, we really are doomed.
         } finally {
-             // Restore config just in case, though in a job it might not matter much
-             config(['log-shipper.enabled' => true]);
+            // Restore config just in case, though in a job it might not matter much
+            config(['log-shipper.enabled' => true]);
         }
     }
 }

@@ -16,16 +16,18 @@ class ShipBatchLogsCommand extends Command
     {
         if (!config('log-shipper.batch.enabled', false)) {
             $this->info('Batch shipping is disabled.');
+
             return;
         }
 
         $size = (int) config('log-shipper.batch.size', 100);
-        
+
         try {
             /** @var LogBufferInterface $buffer */
             $buffer = app(LogBufferInterface::class);
         } catch (\Throwable $e) {
             $this->error('Could not resolve LogBufferInterface: ' . $e->getMessage());
+
             return;
         }
 

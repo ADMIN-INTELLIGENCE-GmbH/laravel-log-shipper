@@ -12,7 +12,7 @@ interface LogBufferInterface
     /**
      * Retrieve and remove a batch of logs from the buffer.
      *
-     * @param int $size Maximum number of logs to retrieve
+     * @param  int  $size  Maximum number of logs to retrieve
      * @return array The batch of logs
      */
     public function popBatch(int $size): array;

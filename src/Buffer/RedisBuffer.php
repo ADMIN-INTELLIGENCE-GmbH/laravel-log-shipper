@@ -24,7 +24,7 @@ class RedisBuffer implements LogBufferInterface
         // We loop to ensure atomic pops without locking the whole list
         for ($i = 0; $i < $size; $i++) {
             $log = $redis->lpop($this->key);
-            
+
             if (!$log) {
                 break;
             }

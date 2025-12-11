@@ -17,6 +17,7 @@ class ShipStatusJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 1;
+
     public int $timeout = 30;
 
     public function handle(): void
@@ -103,15 +104,15 @@ class ShipStatusJob implements ShouldQueue
             // macOS
             elseif (PHP_OS_FAMILY === 'Darwin') {
                 $total = (int) shell_exec('sysctl -n hw.memsize');
-                
+
                 // vm_stat returns pages (usually 4096 bytes)
                 $vmStat = shell_exec('vm_stat');
                 preg_match('/Pages free:\s+(\d+)\./', $vmStat, $freeMatches);
                 preg_match('/Pages speculative:\s+(\d+)\./', $vmStat, $specMatches);
-                
+
                 if ($total > 0 && isset($freeMatches[1])) {
                     $pageSize = 4096; // Standard on macOS/ARM64, but could verify with `pagesize` command
-                    $freePages = (int)$freeMatches[1] + (isset($specMatches[1]) ? (int)$specMatches[1] : 0);
+                    $freePages = (int) $freeMatches[1] + (isset($specMatches[1]) ? (int) $specMatches[1] : 0);
                     $free = $freePages * $pageSize;
                     $used = $total - $free;
 
@@ -137,14 +138,15 @@ class ShipStatusJob implements ShouldQueue
             if (is_readable('/proc/uptime')) {
                 $uptime = file_get_contents('/proc/uptime');
                 $uptime = explode(' ', $uptime)[0];
-                return (int)$uptime;
+
+                return (int) $uptime;
             }
 
             // macOS / BSD
             if (PHP_OS_FAMILY === 'Darwin' || PHP_OS_FAMILY === 'BSD') {
                 $boottime = shell_exec('sysctl -n kern.boottime');
                 if ($boottime && preg_match('/sec = (\d+)/', $boottime, $matches)) {
-                    return time() - (int)$matches[1];
+                    return time() - (int) $matches[1];
                 }
             }
 
@@ -168,12 +170,12 @@ class ShipStatusJob implements ShouldQueue
 
         try {
             $path = config('log-shipper.status.monitored_disk_path', '/');
-            
+
             if (is_dir($path)) {
                 $total = disk_total_space($path);
                 $free = disk_free_space($path);
                 $used = $total - $free;
-                
+
                 $diskMetrics = [
                     'total' => $total,
                     'free' => $free,
@@ -192,11 +194,11 @@ class ShipStatusJob implements ShouldQueue
     {
         try {
             $queueSize = Queue::size();
-            
+
             // Subtract 1 to exclude this status job itself from the count
             // (since we're running as a queued job, we're in the queue)
             $adjustedSize = max(0, $queueSize - 1);
-            
+
             return [
                 'size' => $adjustedSize,
                 'connection' => config('queue.default'),
@@ -229,6 +231,7 @@ class ShipStatusJob implements ShouldQueue
     {
         try {
             $store = Cache::getStore();
+
             return [
                 'driver' => config('cache.default'),
             ];

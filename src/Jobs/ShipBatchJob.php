@@ -20,7 +20,7 @@ class ShipBatchJob implements ShouldQueue
     public function tries(): int
     {
         $tries = config('log-shipper.retries');
-        
+
         return $tries ? (int) $tries : 3;
     }
 
@@ -30,7 +30,7 @@ class ShipBatchJob implements ShouldQueue
     public function backoff(): array
     {
         $backoff = config('log-shipper.backoff');
-        
+
         return is_array($backoff) ? $backoff : [2, 5, 10];
     }
 
@@ -73,7 +73,7 @@ class ShipBatchJob implements ShouldQueue
 
         } catch (\Throwable $e) {
             $this->recordFailure($e);
-            
+
             throw $e;
         }
     }

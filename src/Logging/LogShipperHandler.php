@@ -249,6 +249,7 @@ class LogShipperHandler extends AbstractProcessingHandler
                     'file' => $value->getFile(),
                     'line' => $value->getLine(),
                 ];
+
                 continue;
             }
 

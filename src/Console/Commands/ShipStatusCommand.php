@@ -15,6 +15,7 @@ class ShipStatusCommand extends Command
     {
         if (!config('log-shipper.status.enabled', false)) {
             $this->info('Log Shipper status push is disabled.');
+
             return;
         }
 

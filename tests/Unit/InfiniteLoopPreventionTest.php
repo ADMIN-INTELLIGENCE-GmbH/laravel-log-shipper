@@ -2,9 +2,9 @@
 
 namespace AdminIntelligence\LogShipper\Tests\Unit;
 
+use AdminIntelligence\LogShipper\Jobs\ShipLogJob;
 use AdminIntelligence\LogShipper\Logging\LogShipperHandler;
 use AdminIntelligence\LogShipper\Tests\TestCase;
-use AdminIntelligence\LogShipper\Jobs\ShipLogJob;
 use DateTimeImmutable;
 use Illuminate\Support\Facades\Queue;
 use Monolog\Level;
@@ -25,7 +25,7 @@ class InfiniteLoopPreventionTest extends TestCase
         config(['log-shipper.enabled' => true]);
 
         $handler = new LogShipperHandler(Level::Error);
-        
+
         // Create a log record that mimics a failure log from ShipLogJob
         $record = new LogRecord(
             datetime: new DateTimeImmutable,
@@ -48,7 +48,7 @@ class InfiniteLoopPreventionTest extends TestCase
         config(['log-shipper.enabled' => true]);
 
         $handler = new LogShipperHandler(Level::Error);
-        
+
         // Create a log record that mimics a Laravel job failure log
         $record = new LogRecord(
             datetime: new DateTimeImmutable,
@@ -71,15 +71,15 @@ class InfiniteLoopPreventionTest extends TestCase
         config(['log-shipper.enabled' => true]);
 
         $handler = new LogShipperHandler(Level::Error);
-        
+
         $exception = new \Exception('Connection refused');
         // We can't easily mock the trace, but we can check if the logic holds for the message check above.
         // For the trace check, we'd need to actually throw from the job, which is harder to unit test here without integration.
         // So we'll rely on the message check test and the code review.
-        
+
         // However, we can manually construct a context with an exception that might trigger it if we could mock getTraceAsString,
         // but getTraceAsString is final.
-        
+
         $this->assertTrue(true);
     }
 
@@ -89,7 +89,7 @@ class InfiniteLoopPreventionTest extends TestCase
         config(['log-shipper.enabled' => true]);
 
         $handler = new LogShipperHandler(Level::Error);
-        
+
         $record = new LogRecord(
             datetime: new DateTimeImmutable,
             channel: 'test-channel',

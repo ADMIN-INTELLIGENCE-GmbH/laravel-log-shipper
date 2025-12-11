@@ -2,8 +2,8 @@
 
 namespace AdminIntelligence\LogShipper\Buffer;
 
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Facades\Cache;
 
 class CacheBuffer implements LogBufferInterface
 {
@@ -20,7 +20,7 @@ class CacheBuffer implements LogBufferInterface
             $lock->block(5);
 
             $buffer = Cache::store($this->store)->get($this->key, []);
-            
+
             // Ensure it's an array (handle corruption or empty state)
             if (!is_array($buffer)) {
                 $buffer = [];
@@ -73,6 +73,7 @@ class CacheBuffer implements LogBufferInterface
     public function size(): int
     {
         $buffer = Cache::store($this->store)->get($this->key, []);
+
         return is_array($buffer) ? count($buffer) : 0;
     }
 }
