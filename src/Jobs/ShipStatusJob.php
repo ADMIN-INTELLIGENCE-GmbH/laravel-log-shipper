@@ -66,13 +66,68 @@ class ShipStatusJob implements ShouldQueue
     protected function getSystemMetrics(): array
     {
         return [
-            'memory_usage' => memory_get_usage(true),
-            'memory_peak' => memory_get_peak_usage(true),
+            'memory_usage' => memory_get_usage(true), // PHP process memory
+            'memory_peak' => memory_get_peak_usage(true), // PHP process peak memory
+            'server_memory' => $this->getServerMemory(), // Real system RAM
             'php_version' => PHP_VERSION,
             'laravel_version' => app()->version(),
             'uptime' => $this->getUptime(),
             'disk_space' => $this->getDiskSpace(),
         ];
+    }
+
+    protected function getServerMemory(): array
+    {
+        $memory = ['total' => null, 'free' => null, 'used' => null, 'percent_used' => null];
+
+        try {
+            // Linux
+            if (is_readable('/proc/meminfo')) {
+                $memInfo = file_get_contents('/proc/meminfo');
+                preg_match('/MemTotal:\s+(\d+)\s+kB/', $memInfo, $totalMatches);
+                preg_match('/MemAvailable:\s+(\d+)\s+kB/', $memInfo, $availableMatches);
+
+                if (isset($totalMatches[1], $availableMatches[1])) {
+                    $total = $totalMatches[1] * 1024;
+                    $available = $availableMatches[1] * 1024;
+                    $used = $total - $available;
+
+                    $memory = [
+                        'total' => $total,
+                        'free' => $available,
+                        'used' => $used,
+                        'percent_used' => round(($used / $total) * 100, 2),
+                    ];
+                }
+            }
+            // macOS
+            elseif (PHP_OS_FAMILY === 'Darwin') {
+                $total = (int) shell_exec('sysctl -n hw.memsize');
+                
+                // vm_stat returns pages (usually 4096 bytes)
+                $vmStat = shell_exec('vm_stat');
+                preg_match('/Pages free:\s+(\d+)\./', $vmStat, $freeMatches);
+                preg_match('/Pages speculative:\s+(\d+)\./', $vmStat, $specMatches);
+                
+                if ($total > 0 && isset($freeMatches[1])) {
+                    $pageSize = 4096; // Standard on macOS/ARM64, but could verify with `pagesize` command
+                    $freePages = (int)$freeMatches[1] + (isset($specMatches[1]) ? (int)$specMatches[1] : 0);
+                    $free = $freePages * $pageSize;
+                    $used = $total - $free;
+
+                    $memory = [
+                        'total' => $total,
+                        'free' => $free,
+                        'used' => $used,
+                        'percent_used' => round(($used / $total) * 100, 2),
+                    ];
+                }
+            }
+        } catch (\Throwable) {
+            // Fail silently
+        }
+
+        return $memory;
     }
 
     protected function getUptime(): ?int

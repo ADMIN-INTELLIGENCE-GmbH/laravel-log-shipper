@@ -211,6 +211,12 @@ Here is an example of the JSON payload sent for a status update:
     "system": {
         "memory_usage": 25165824,
         "memory_peak": 26214400,
+        "server_memory": {
+            "total": 17179869184,
+            "free": 4294967296,
+            "used": 12884901888,
+            "percent_used": 75.0
+        },
         "php_version": "8.3.0",
         "laravel_version": "11.0.0",
         "uptime": 86400,
@@ -238,10 +244,44 @@ Here is an example of the JSON payload sent for a status update:
 }
 ```
 
-## Data Sanitization jobs count (excluding the status job itself)
-- **Database**: Connection status and latency
-- **Cache**: Active cache driver
-- **Filesize**: Sizes of specific monitored files (configurable)
+### System Metrics Details
+
+The status payload includes the following system metrics:
+
+#### System Object
+| Field | Type | Description |
+|-------|------|-------------|
+| `memory_usage` | int | Current memory usage of the PHP process (bytes) |
+| `memory_peak` | int | Peak memory usage of the PHP process (bytes) |
+| `server_memory` | object | Server-level RAM metrics (see below) |
+| `php_version` | string | PHP version |
+| `laravel_version` | string | Laravel framework version |
+| `uptime` | int\|null | System uptime in seconds (null if unavailable) |
+| `disk_space` | object | Disk space metrics for monitored path |
+
+#### Server Memory Object
+| Field | Type | Description |
+|-------|------|-------------|
+| `total` | int\|null | Total system RAM (bytes) |
+| `free` | int\|null | Available system RAM (bytes) |
+| `used` | int\|null | Used system RAM (bytes) |
+| `percent_used` | float\|null | Percentage of RAM in use |
+
+> **Note on macOS:** The `percent_used` includes filesystem cache. This is normal macOS behavior and does not indicate memory pressure.
+
+#### Queue Object
+- **Size**: Queue jobs count (excluding the status job itself)
+- **Connection**: Active queue connection
+
+#### Database Object
+- **Status**: Connection status (`connected` or `disconnected`)
+- **Latency**: Query latency in milliseconds
+
+#### Cache Object
+- **Driver**: Active cache driver
+
+#### Filesize Object
+- **Files**: Sizes of specific monitored files (configurable)
 
 To configure which metrics are sent or to monitor specific files, publish the config and update the `status` section:
 
