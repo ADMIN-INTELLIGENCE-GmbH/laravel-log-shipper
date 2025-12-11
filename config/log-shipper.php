@@ -55,6 +55,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Fallback Channel
+    |--------------------------------------------------------------------------
+    |
+    | If shipping fails, logs will be written to this local channel.
+    | Set to null to disable fallback logging.
+    |
+    */
+    'fallback_channel' => env('LOG_SHIPPER_FALLBACK', null),
+
+    /*
+    |--------------------------------------------------------------------------
     | Fields to Sanitize
     |--------------------------------------------------------------------------
     |

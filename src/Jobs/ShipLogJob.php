@@ -8,6 +8,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class ShipLogJob implements ShouldQueue
 {
@@ -55,9 +56,31 @@ class ShipLogJob implements ShouldQueue
 
             // We intentionally don't check the response.
             // If it fails, it fails. Life goes on. Probably.
+        } catch (\Throwable $e) {
+            $this->handleFailure($e);
+        }
+    }
+
+    protected function handleFailure(\Throwable $e): void
+    {
+        $fallbackChannel = config('log-shipper.fallback_channel');
+
+        if (empty($fallbackChannel)) {
+            return;
+        }
+
+        try {
+            $level = $this->payload['level'] ?? 'error';
+            $message = $this->payload['message'] ?? 'Unknown error';
+            $context = $this->payload['context'] ?? [];
+            
+            // Add metadata about the failure
+            $context['log_shipper_failure'] = $e->getMessage();
+            $context['original_payload'] = $this->payload;
+
+            Log::channel($fallbackChannel)->log($level, $message, $context);
         } catch (\Throwable) {
-            // Fail silently. The irony of a log shipper failing to log
-            // its own failures is not lost on us.
+            // If the fallback fails, we really are doomed.
         }
     }
 

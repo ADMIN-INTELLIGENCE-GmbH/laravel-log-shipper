@@ -87,6 +87,7 @@ Log::error('Something went wrong', ['order_id' => 123]);
 | `api_key` | Your project's API key | - |
 | `queue_connection` | Queue connection to use | `default` |
 | `queue_name` | Queue name for log jobs | `default` |
+| `fallback_channel` | Local channel to use if shipping fails | `null` |
 | `sanitize_fields` | Fields to redact from logs | See config |
 | `send_context` | Context data to include | See config |
 
@@ -302,6 +303,18 @@ LOG_SHIPPER_QUEUE=sync
 ```
 
 > **Note:** Sync mode will block your application until the HTTP request completes. Use queued mode in production for better performance.
+
+## Fallback Channel
+
+If the log shipper fails to send logs (e.g., due to network issues or server downtime), you can configure a fallback channel to ensure logs are not lost.
+
+Add the following to your `.env` file:
+
+```env
+LOG_SHIPPER_FALLBACK=daily
+```
+
+When a failure occurs, the original log payload will be written to the specified channel, along with failure details in the context.
 
 ## Contributing
 
