@@ -170,14 +170,27 @@ Add the following to your `.env` file:
 
 ```env
 LOG_SHIPPER_STATUS_ENABLED=true
-LOG_SHIPPER_STATUS_INTERVAL=300 # seconds (default: 5 minutes)
+LOG_SHIPPER_STATUS_ENDPOINT=https://your-log-server.com/api/stats
+LOG_SHIPPER_STATUS_INTERVAL=5 # minutes (default: 5)
 ```
 
-By default, status updates are sent to `/stats` relative to your log endpoint (e.g., `https://your-log-server.com/api/stats`). You can override this:
+You can also configure the disk path to monitor:
 
 ```env
-LOG_SHIPPER_STATUS_ENDPOINT=https://your-log-server.com/api/custom-stats
+LOG_SHIPPER_DISK_PATH=/
 ```
+
+#### Interval Configuration
+
+The `LOG_SHIPPER_STATUS_INTERVAL` setting supports flexible scheduling:
+
+| Interval | Behavior | Example |
+|----------|----------|---------|
+| 1-59 | Every N minutes | `5` = Every 5 minutes |
+| 60-1439 | Every N hours | `120` = Every 2 hours, `180` = Every 3 hours |
+| 1440+ | Daily | `1440` = Daily at midnight |
+
+The scheduler automatically selects the appropriate cron expression based on your interval value.
 
 ### Collected Metrics
 
@@ -240,6 +253,8 @@ To configure which metrics are sent or to monitor specific files, publish the co
         'cache' => true,
         'filesize' => true,
     ],
+
+    'monitored_disk_path' => '/',
 
     'monitored_files' => [
         storage_path('logs/laravel.log'),

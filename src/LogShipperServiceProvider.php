@@ -38,24 +38,21 @@ class LogShipperServiceProvider extends ServiceProvider
         }
 
         $schedule = $this->app->make(\Illuminate\Console\Scheduling\Schedule::class);
-        $interval = (int) config('log-shipper.status.interval', 300);
+        $minutes = (int) config('log-shipper.status.interval', 5);
 
-        // Convert seconds to appropriate schedule method
-        if ($interval <= 60) {
-            // For intervals <= 1 minute, use everyMinute
-            $schedule->command('log-shipper:status')->everyMinute();
-        } elseif ($interval < 300) {
-            // For 1-5 minutes, use everyFiveMinutes as a safe default
-            $schedule->command('log-shipper:status')->everyFiveMinutes();
-        } elseif ($interval < 600) {
-            // For 5-10 minutes
-            $schedule->command('log-shipper:status')->everyTenMinutes();
-        } elseif ($interval < 1800) {
-            // For 10-30 minutes
-            $schedule->command('log-shipper:status')->everyThirtyMinutes();
+        // Ensure interval is at least 1 minute
+        $minutes = max(1, $minutes);
+
+        if ($minutes >= 1440) {
+            // Daily
+            $schedule->command('log-shipper:status')->daily();
+        } elseif ($minutes >= 60) {
+            // Hourly (or every N hours)
+            $hours = intdiv($minutes, 60);
+            $schedule->command('log-shipper:status')->cron("0 */{$hours} * * *");
         } else {
-            // For 30+ minutes
-            $schedule->command('log-shipper:status')->hourly();
+            // Every N minutes
+            $schedule->command('log-shipper:status')->cron("*/{$minutes} * * * *");
         }
     }
 
