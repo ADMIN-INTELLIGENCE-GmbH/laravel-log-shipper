@@ -21,7 +21,41 @@ class LogShipperServiceProvider extends ServiceProvider
                 __DIR__ . '/../config/log-shipper.php' => config_path('log-shipper.php'),
             ], 'log-shipper-config');
 
+            $this->commands([
+                \AdminIntelligence\LogShipper\Console\Commands\ShipStatusCommand::class,
+                \AdminIntelligence\LogShipper\Console\Commands\TestStatusCommand::class,
+            ]);
+
             $this->warnIfMisconfigured();
+            $this->scheduleStatusPush();
+        }
+    }
+
+    protected function scheduleStatusPush(): void
+    {
+        if (!config('log-shipper.status.enabled', false)) {
+            return;
+        }
+
+        $schedule = $this->app->make(\Illuminate\Console\Scheduling\Schedule::class);
+        $interval = (int) config('log-shipper.status.interval', 300);
+
+        // Convert seconds to appropriate schedule method
+        if ($interval <= 60) {
+            // For intervals <= 1 minute, use everyMinute
+            $schedule->command('log-shipper:status')->everyMinute();
+        } elseif ($interval < 300) {
+            // For 1-5 minutes, use everyFiveMinutes as a safe default
+            $schedule->command('log-shipper:status')->everyFiveMinutes();
+        } elseif ($interval < 600) {
+            // For 5-10 minutes
+            $schedule->command('log-shipper:status')->everyTenMinutes();
+        } elseif ($interval < 1800) {
+            // For 10-30 minutes
+            $schedule->command('log-shipper:status')->everyThirtyMinutes();
+        } else {
+            // For 30+ minutes
+            $schedule->command('log-shipper:status')->hourly();
         }
     }
 

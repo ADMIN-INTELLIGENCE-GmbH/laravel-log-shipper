@@ -133,6 +133,124 @@ To disable specific context fields, update your `config/log-shipper.php`:
 ],
 ```
 
+### Example Log Payload
+
+Here is an example of the JSON payload sent for a log event:
+
+```json
+{
+    "level": "error",
+    "message": "Order processing failed",
+    "context": {
+        "order_id": 12345,
+        "reason": "Payment declined"
+    },
+    "datetime": "2025-12-11 14:30:45.123456",
+    "channel": "local",
+    "extra": {},
+    "user_id": "1",
+    "ip_address": "127.0.0.1",
+    "user_agent": "Mozilla/5.0...",
+    "request_method": "POST",
+    "request_url": "https://api.example.com/orders",
+    "route_name": "orders.store",
+    "controller_action": "App\\Http\\Controllers\\OrderController@store",
+    "app_env": "production",
+    "app_debug": false
+}
+```
+
+## Status Monitoring
+
+The package can automatically push system health metrics to your log server on a configurable interval. This helps you monitor the health of your application instances.
+
+### Enable Status Push
+
+Add the following to your `.env` file:
+
+```env
+LOG_SHIPPER_STATUS_ENABLED=true
+LOG_SHIPPER_STATUS_INTERVAL=300 # seconds (default: 5 minutes)
+```
+
+By default, status updates are sent to `/stats` relative to your log endpoint (e.g., `https://your-log-server.com/api/stats`). You can override this:
+
+```env
+LOG_SHIPPER_STATUS_ENDPOINT=https://your-log-server.com/api/custom-stats
+```
+
+### Collected Metrics
+
+> **Note:** Status pushing relies on Laravel's scheduler. Ensure you have the scheduler running:
+> `* * * * * cd /path-to-your-project && php artisan schedule:run >> /dev/null 2>&1`
+
+### Example Status Payload
+
+Here is an example of the JSON payload sent for a status update:
+
+```json
+{
+    "timestamp": "2025-12-11T14:30:45+00:00",
+    "app_name": "Laravel",
+    "app_env": "production",
+    "instance_id": "web-server-01",
+    "system": {
+        "memory_usage": 25165824,
+        "memory_peak": 26214400,
+        "php_version": "8.3.0",
+        "laravel_version": "11.0.0",
+        "uptime": 86400,
+        "disk_space": {
+            "total": 100000000000,
+            "free": 60000000000,
+            "used": 40000000000,
+            "percent_used": 40.0
+        }
+    },
+    "queue": {
+        "size": 15,
+        "connection": "redis"
+    },
+    "database": {
+        "status": "connected",
+        "latency_ms": 1.2
+    },
+    "cache": {
+        "driver": "redis"
+    },
+    "filesize": {
+        "laravel.log": 102400
+    }
+}
+```
+
+## Data Sanitization jobs count (excluding the status job itself)
+- **Database**: Connection status and latency
+- **Cache**: Active cache driver
+- **Filesize**: Sizes of specific monitored files (configurable)
+
+To configure which metrics are sent or to monitor specific files, publish the config and update the `status` section:
+
+```php
+'status' => [
+    'metrics' => [
+        'system' => true,
+        'queue' => true,
+        'database' => true,
+        'cache' => true,
+        'filesize' => true,
+    ],
+
+    'monitored_files' => [
+        storage_path('logs/laravel.log'),
+        storage_path('logs/worker.log'),
+    ],
+],
+```
+
+> **Note:** Status pushing relies on Laravel's scheduler. Ensure you have the scheduler running:
+> `* * * * * cd /path-to-your-project && php artisan schedule:run >> /dev/null 2>&1`
+
 ## Data Sanitization
 
 The package automatically redacts sensitive fields from your logs. The following field patterns are redacted by default:

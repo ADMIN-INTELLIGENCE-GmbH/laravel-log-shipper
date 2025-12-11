@@ -45,10 +45,10 @@ class LogShipperHandler extends AbstractProcessingHandler
         $payload = [
             'level' => strtolower($record->level->name),
             'message' => $record->message,
-            'context' => $record->context,
+            'context' => $this->filterSerializable($record->context),
             'datetime' => $record->datetime->format('Y-m-d H:i:s.u'),
             'channel' => $record->channel,
-            'extra' => $record->extra,
+            'extra' => $this->filterSerializable($record->extra),
         ];
 
         // Add request context if available and configured
@@ -176,5 +176,38 @@ class LogShipperHandler extends AbstractProcessingHandler
         }
 
         return false;
+    }
+
+    protected function filterSerializable(array $data): array
+    {
+        $filtered = [];
+
+        foreach ($data as $key => $value) {
+            // Skip closures and resources
+            if ($value instanceof \Closure || is_resource($value)) {
+                continue;
+            }
+
+            // Skip Throwable objects to avoid serialization issues with stack traces
+            if ($value instanceof \Throwable) {
+                $filtered[$key] = [
+                    'class' => $value::class,
+                    'message' => $value->getMessage(),
+                    'code' => $value->getCode(),
+                    'file' => $value->getFile(),
+                    'line' => $value->getLine(),
+                ];
+                continue;
+            }
+
+            // Recursively filter arrays
+            if (is_array($value)) {
+                $filtered[$key] = $this->filterSerializable($value);
+            } else {
+                $filtered[$key] = $value;
+            }
+        }
+
+        return $filtered;
     }
 }
