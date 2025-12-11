@@ -12,6 +12,18 @@ class LogShipperServiceProvider extends ServiceProvider
             __DIR__ . '/../config/log-shipper.php',
             'log-shipper'
         );
+
+        $this->app->bind(\AdminIntelligence\LogShipper\Buffer\LogBufferInterface::class, function ($app) {
+            $driver = config('log-shipper.batch.driver', 'redis');
+            $connection = config('log-shipper.batch.connection', 'default');
+            $key = config('log-shipper.batch.buffer_key', 'log_shipper_buffer');
+
+            if ($driver === 'cache') {
+                return new \AdminIntelligence\LogShipper\Buffer\CacheBuffer($connection, $key);
+            }
+
+            return new \AdminIntelligence\LogShipper\Buffer\RedisBuffer($connection, $key);
+        });
     }
 
     public function boot(): void
@@ -24,11 +36,28 @@ class LogShipperServiceProvider extends ServiceProvider
             $this->commands([
                 \AdminIntelligence\LogShipper\Console\Commands\ShipStatusCommand::class,
                 \AdminIntelligence\LogShipper\Console\Commands\TestStatusCommand::class,
+                \AdminIntelligence\LogShipper\Console\Commands\ShipBatchLogsCommand::class,
             ]);
 
             $this->warnIfMisconfigured();
             $this->scheduleStatusPush();
+            $this->scheduleBatchShipping();
         }
+    }
+
+    protected function scheduleBatchShipping(): void
+    {
+        if (!config('log-shipper.batch.enabled', false)) {
+            return;
+        }
+
+        $schedule = $this->app->make(\Illuminate\Console\Scheduling\Schedule::class);
+        $interval = (int) config('log-shipper.batch.interval', 1);
+
+        // Ensure interval is at least 1 minute
+        $interval = max(1, $interval);
+
+        $schedule->command('log-shipper:ship-batch')->cron("*/{$interval} * * * *");
     }
 
     protected function scheduleStatusPush(): void

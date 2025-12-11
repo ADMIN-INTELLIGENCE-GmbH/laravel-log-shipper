@@ -347,6 +347,32 @@ LOG_SHIPPER_QUEUE=sync
 
 > **Note:** Sync mode will block your application until the HTTP request completes. Use queued mode in production for better performance.
 
+## Batch Shipping
+
+For high-traffic applications, dispatching a job for every log event can create significant queue pressure. You can enable batch shipping to buffer logs in Redis and ship them in chunks.
+
+### Enable Batch Shipping
+
+Add the following to your `.env` file:
+
+```env
+LOG_SHIPPER_BATCH_ENABLED=true
+LOG_SHIPPER_BATCH_SIZE=100
+LOG_SHIPPER_BATCH_INTERVAL=1 # Run every minute
+```
+
+### Requirements
+
+- Redis connection (configured in `config/database.php`)
+- Laravel Scheduler running
+
+### How it Works
+
+1. Logs are pushed to a Redis list (`log_shipper_buffer`) instead of dispatching a job immediately.
+2. A scheduled command (`log-shipper:ship-batch`) runs every minute.
+3. The command pops logs in batches (default: 100) and dispatches a single job per batch.
+4. The job ships the batch to the log server in a single HTTP request.
+
 ## Reliability & Fault Tolerance
 
 This package includes built-in mechanisms to ensure your application remains stable even if the log server is down.

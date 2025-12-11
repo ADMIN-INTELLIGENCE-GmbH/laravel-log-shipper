@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Batch Shipping**: Added support for buffering logs in Redis and shipping them in batches to reduce queue pressure.
 - **Status Monitoring**: Added automatic system health monitoring (CPU, Memory, Disk, Queue, Database) with configurable reporting intervals.
 - **Circuit Breaker**: Implemented a circuit breaker pattern to stop shipping logs temporarily after repeated failures, preventing queue congestion during outages.
 - **Retries & Backoff**: Added configurable retry attempts and exponential backoff strategy for failed log shipping jobs.

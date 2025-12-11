@@ -93,6 +93,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Batch Shipping
+    |--------------------------------------------------------------------------
+    |
+    | Buffer logs and ship them in batches to reduce queue pressure.
+    | Requires a Redis connection.
+    |
+    */
+    'batch' => [
+        'enabled' => env('LOG_SHIPPER_BATCH_ENABLED', false),
+        'driver' => env('LOG_SHIPPER_BATCH_DRIVER', 'redis'), // 'redis' or 'cache'
+        'size' => env('LOG_SHIPPER_BATCH_SIZE', 100), // Number of logs to ship at once
+        'buffer_key' => env('LOG_SHIPPER_BATCH_KEY', 'log_shipper_buffer'),
+        'connection' => env('LOG_SHIPPER_BATCH_CONNECTION', 'default'), // Redis connection or Cache store
+        'interval' => env('LOG_SHIPPER_BATCH_INTERVAL', 1), // Minutes between batch runs
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Fields to Sanitize
     |--------------------------------------------------------------------------
     |

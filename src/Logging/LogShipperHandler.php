@@ -2,6 +2,7 @@
 
 namespace AdminIntelligence\LogShipper\Logging;
 
+use AdminIntelligence\LogShipper\Buffer\LogBufferInterface;
 use AdminIntelligence\LogShipper\Jobs\ShipLogJob;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
@@ -40,6 +41,19 @@ class LogShipperHandler extends AbstractProcessingHandler
 
         $payload = $this->buildPayload($record);
         $sanitizedPayload = $this->sanitize($payload);
+
+        // Batch Shipping
+        if (config('log-shipper.batch.enabled', false)) {
+            try {
+                /** @var LogBufferInterface $buffer */
+                $buffer = app(LogBufferInterface::class);
+                $buffer->push($sanitizedPayload);
+
+                return;
+            } catch (\Throwable $e) {
+                // If buffer fails, fall back to direct shipping
+            }
+        }
 
         $connection = config('log-shipper.queue_connection', 'default');
         $queue = config('log-shipper.queue_name', 'default');
