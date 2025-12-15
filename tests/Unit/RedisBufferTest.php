@@ -21,6 +21,7 @@ class RedisBufferTest extends TestCase
             ->once()
             ->with('log_shipper_buffer', \Mockery::on(function ($json) {
                 $decoded = json_decode($json, true);
+
                 return $decoded['level'] === 'error' && $decoded['message'] === 'Test';
             }));
 

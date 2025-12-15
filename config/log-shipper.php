@@ -161,7 +161,7 @@ return [
     */
     'ip_obfuscation' => [
         'enabled' => env('LOG_SHIPPER_IP_OBFUSCATION_ENABLED', false),
-        
+
         // 'mask' - Mask last octets (e.g., 192.168.1.100 becomes 192.168.1.0)
         // 'hash' - One-way hash for privacy while maintaining consistency
         'method' => env('LOG_SHIPPER_IP_OBFUSCATION_METHOD', 'mask'),

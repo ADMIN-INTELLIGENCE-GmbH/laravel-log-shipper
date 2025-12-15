@@ -16,7 +16,7 @@ class ShipStatusJobTest extends TestCase
 
         config(['log-shipper.status.enabled' => false]);
 
-        $job = new ShipStatusJob();
+        $job = new ShipStatusJob;
         $job->handle();
 
         Http::assertNothingSent();
@@ -36,11 +36,12 @@ class ShipStatusJobTest extends TestCase
             'log-shipper.status.metrics.system' => true,
         ]);
 
-        $job = new ShipStatusJob();
+        $job = new ShipStatusJob;
         $job->handle();
 
         Http::assertSent(function ($request) {
             $data = $request->data();
+
             return isset($data['system'])
                 && isset($data['system']['php_version'])
                 && isset($data['system']['laravel_version'])
@@ -62,11 +63,12 @@ class ShipStatusJobTest extends TestCase
             'log-shipper.status.metrics.system' => true,
         ]);
 
-        $job = new ShipStatusJob();
+        $job = new ShipStatusJob;
         $job->handle();
 
         Http::assertSent(function ($request) {
             $data = $request->data();
+
             return array_key_exists('cpu_usage', $data['system']);
         });
     }
@@ -89,12 +91,13 @@ class ShipStatusJobTest extends TestCase
             'log-shipper.status.monitored_files' => [$tempFile],
         ]);
 
-        $job = new ShipStatusJob();
+        $job = new ShipStatusJob;
         $job->handle();
 
         Http::assertSent(function ($request) use ($tempFile) {
             $data = $request->data();
             $basename = basename($tempFile);
+
             return isset($data['filesize'])
                 && isset($data['filesize'][$basename])
                 && $data['filesize'][$basename] === 12; // 'test content' = 12 bytes
@@ -118,11 +121,12 @@ class ShipStatusJobTest extends TestCase
             'log-shipper.status.monitored_files' => ['/non/existent/file.log'],
         ]);
 
-        $job = new ShipStatusJob();
+        $job = new ShipStatusJob;
         $job->handle();
 
         Http::assertSent(function ($request) {
             $data = $request->data();
+
             return isset($data['filesize'])
                 && isset($data['filesize']['file.log'])
                 && $data['filesize']['file.log'] === -1;
@@ -152,12 +156,13 @@ class ShipStatusJobTest extends TestCase
             'log-shipper.status.monitored_folders' => [$tempDir],
         ]);
 
-        $job = new ShipStatusJob();
+        $job = new ShipStatusJob;
         $job->handle();
 
         Http::assertSent(function ($request) use ($tempDir) {
             $data = $request->data();
             $basename = basename($tempDir);
+
             return isset($data['foldersize'])
                 && isset($data['foldersize'][$basename])
                 && $data['foldersize'][$basename] === 24; // 8 + 8 + 8 = 24 bytes
@@ -186,11 +191,12 @@ class ShipStatusJobTest extends TestCase
             'log-shipper.status.monitored_folders' => ['/non/existent/folder'],
         ]);
 
-        $job = new ShipStatusJob();
+        $job = new ShipStatusJob;
         $job->handle();
 
         Http::assertSent(function ($request) {
             $data = $request->data();
+
             return isset($data['foldersize'])
                 && isset($data['foldersize']['folder'])
                 && $data['foldersize']['folder'] === -1;
@@ -206,7 +212,7 @@ class ShipStatusJobTest extends TestCase
         mkdir($tempDir . '/level1');
         mkdir($tempDir . '/level1/level2');
         mkdir($tempDir . '/level1/level2/level3');
-        
+
         file_put_contents($tempDir . '/root.txt', 'a'); // 1 byte
         file_put_contents($tempDir . '/level1/file.txt', 'bb'); // 2 bytes
         file_put_contents($tempDir . '/level1/level2/file.txt', 'ccc'); // 3 bytes
@@ -224,12 +230,13 @@ class ShipStatusJobTest extends TestCase
             'log-shipper.status.monitored_folders' => [$tempDir],
         ]);
 
-        $job = new ShipStatusJob();
+        $job = new ShipStatusJob;
         $job->handle();
 
         Http::assertSent(function ($request) use ($tempDir) {
             $data = $request->data();
             $basename = basename($tempDir);
+
             return isset($data['foldersize'])
                 && isset($data['foldersize'][$basename])
                 && $data['foldersize'][$basename] === 10; // 1 + 2 + 3 + 4 = 10 bytes
@@ -260,11 +267,12 @@ class ShipStatusJobTest extends TestCase
             'log-shipper.status.metrics.queue' => true,
         ]);
 
-        $job = new ShipStatusJob();
+        $job = new ShipStatusJob;
         $job->handle();
 
         Http::assertSent(function ($request) {
             $data = $request->data();
+
             return isset($data['queue'])
                 && array_key_exists('size', $data['queue'])
                 && isset($data['queue']['connection']);
@@ -285,11 +293,12 @@ class ShipStatusJobTest extends TestCase
             'log-shipper.status.metrics.database' => true,
         ]);
 
-        $job = new ShipStatusJob();
+        $job = new ShipStatusJob;
         $job->handle();
 
         Http::assertSent(function ($request) {
             $data = $request->data();
+
             return isset($data['database'])
                 && isset($data['database']['status']);
         });
@@ -306,7 +315,7 @@ class ShipStatusJobTest extends TestCase
             'log-shipper.api_key' => 'test-key',
         ]);
 
-        $job = new ShipStatusJob();
+        $job = new ShipStatusJob;
         $job->handle();
 
         Http::assertNothingSent();
@@ -323,7 +332,7 @@ class ShipStatusJobTest extends TestCase
             'log-shipper.api_key' => '',
         ]);
 
-        $job = new ShipStatusJob();
+        $job = new ShipStatusJob;
         $job->handle();
 
         Http::assertNothingSent();
@@ -342,7 +351,7 @@ class ShipStatusJobTest extends TestCase
             'log-shipper.api_key' => 'my-secret-key',
         ]);
 
-        $job = new ShipStatusJob();
+        $job = new ShipStatusJob;
         $job->handle();
 
         Http::assertSent(function ($request) {
@@ -367,11 +376,12 @@ class ShipStatusJobTest extends TestCase
             'app.env' => 'testing',
         ]);
 
-        $job = new ShipStatusJob();
+        $job = new ShipStatusJob;
         $job->handle();
 
         Http::assertSent(function ($request) {
             $data = $request->data();
+
             return isset($data['timestamp'])
                 && isset($data['app_name'])
                 && $data['app_name'] === 'Test App'
@@ -399,11 +409,12 @@ class ShipStatusJobTest extends TestCase
             'log-shipper.status.metrics.foldersize' => false,
         ]);
 
-        $job = new ShipStatusJob();
+        $job = new ShipStatusJob;
         $job->handle();
 
         Http::assertSent(function ($request) {
             $data = $request->data();
+
             return !isset($data['system'])
                 && !isset($data['queue'])
                 && !isset($data['database'])

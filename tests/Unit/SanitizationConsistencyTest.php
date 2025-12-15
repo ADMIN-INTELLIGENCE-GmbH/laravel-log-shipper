@@ -47,7 +47,7 @@ class SanitizationConsistencyTest extends TestCase
             $property = $reflection->getProperty('payload');
             $property->setAccessible(true);
             $payload = $property->getValue($job);
-            
+
             return $payload['context']['password'] === '[REDACTED]'
                 && $payload['context']['username'] === 'john';
         });
@@ -78,7 +78,7 @@ class SanitizationConsistencyTest extends TestCase
             $property = $reflection->getProperty('payload');
             $property->setAccessible(true);
             $payload = $property->getValue($job);
-            
+
             return $payload['context']['user_password'] === '[REDACTED]'
                 && $payload['context']['api_secret'] === '[REDACTED]'
                 && $payload['context']['user_name'] === 'john';
@@ -109,7 +109,7 @@ class SanitizationConsistencyTest extends TestCase
             $property = $reflection->getProperty('payload');
             $property->setAccessible(true);
             $payload = $property->getValue($job);
-            
+
             return $payload['context']['password_confirmation'] === '[REDACTED]'
                 && $payload['context']['token_refresh'] === '[REDACTED]';
         });
@@ -139,7 +139,7 @@ class SanitizationConsistencyTest extends TestCase
             $property = $reflection->getProperty('payload');
             $property->setAccessible(true);
             $payload = $property->getValue($job);
-            
+
             // Current implementation matches hyphen-delimited fields
             return $payload['context']['user-password'] === '[REDACTED]'
                 && $payload['context']['api-token'] === '[REDACTED]';
@@ -172,7 +172,7 @@ class SanitizationConsistencyTest extends TestCase
             $property = $reflection->getProperty('payload');
             $property->setAccessible(true);
             $payload = $property->getValue($job);
-            
+
             return $payload['context']['compass'] === 'north'
                 && $payload['context']['passage'] === 'hallway'
                 && $payload['context']['secretary'] === 'John'
@@ -209,8 +209,9 @@ class SanitizationConsistencyTest extends TestCase
             $property = $reflection->getProperty('payload');
             $property->setAccessible(true);
             $payload = $property->getValue($job);
-            
+
             $user = $payload['context']['user'];
+
             return $user['name'] === 'John'
                 && $user['password'] === '[REDACTED]'
                 && $user['profile']['api_key'] === '[REDACTED]';
@@ -242,7 +243,7 @@ class SanitizationConsistencyTest extends TestCase
             $property = $reflection->getProperty('payload');
             $property->setAccessible(true);
             $payload = $property->getValue($job);
-            
+
             return $payload['context']['PASSWORD'] === '[REDACTED]'
                 && $payload['context']['Password'] === '[REDACTED]'
                 && $payload['context']['PassWord'] === '[REDACTED]';
@@ -309,7 +310,7 @@ class SanitizationConsistencyTest extends TestCase
             $property = $reflection->getProperty('payload');
             $property->setAccessible(true);
             $payload = $property->getValue($job);
-            
+
             return $payload['context']['old_password'] === '[REDACTED]'
                 && $payload['context']['new_password'] === '[REDACTED]'
                 && $payload['context']['password_confirmation'] === '[REDACTED]';

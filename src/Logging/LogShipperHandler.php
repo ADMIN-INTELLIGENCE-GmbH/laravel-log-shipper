@@ -42,15 +42,15 @@ class LogShipperHandler extends AbstractProcessingHandler
 
         $payload = $this->buildPayload($record);
         $sanitizedPayload = $this->sanitize($payload);
-        
+
         // SECURITY: Prevent DoS by limiting payload size (default 1MB)
         $maxSize = config('log-shipper.max_payload_size', 1048576);
         $jsonPayload = json_encode($sanitizedPayload);
-        
+
         // If json_encode fails, continue anyway (better to try sending than silently fail)
         if ($jsonPayload !== false) {
             $payloadSize = strlen($jsonPayload);
-            
+
             if ($payloadSize > $maxSize) {
                 // Truncate large payloads
                 if (isset($sanitizedPayload['context'])) {
@@ -88,7 +88,7 @@ class LogShipperHandler extends AbstractProcessingHandler
         } catch (\Throwable $e) {
             // If dispatching fails, try the fallback channel
             $fallbackChannel = config('log-shipper.fallback_channel');
-            
+
             // CRITICAL: Prevent infinite loop if fallback channel is log_shipper
             if ($fallbackChannel && $fallbackChannel !== 'log_shipper') {
                 try {
@@ -96,7 +96,7 @@ class LogShipperHandler extends AbstractProcessingHandler
                         'LogShipper failed to dispatch job',
                         [
                             'exception' => $e->getMessage(),
-                            'original_payload' => $sanitizedPayload
+                            'original_payload' => $sanitizedPayload,
                         ]
                     );
                 } catch (\Throwable $fallbackError) {
@@ -112,7 +112,7 @@ class LogShipperHandler extends AbstractProcessingHandler
         if ($record->level->value < Level::Warning->value) {
             return false;
         }
-        
+
         // Check if the message mentions the job class
         if (str_contains($record->message, 'AdminIntelligence\LogShipper\Jobs\ShipLogJob')) {
             return true;
@@ -121,13 +121,13 @@ class LogShipperHandler extends AbstractProcessingHandler
         // Check if the exception context comes from the job
         if (isset($record->context['exception']) && $record->context['exception'] instanceof \Throwable) {
             $exception = $record->context['exception'];
-            
+
             // Check trace string
             $trace = $exception->getTraceAsString();
             if (str_contains($trace, 'AdminIntelligence\LogShipper\Jobs\ShipLogJob')) {
                 return true;
             }
-            
+
             // Also check trace array for file paths
             foreach ($exception->getTrace() as $frame) {
                 if (isset($frame['file']) && str_contains($frame['file'], 'LogShipper/Jobs/ShipLogJob')) {
@@ -280,14 +280,14 @@ class LogShipperHandler extends AbstractProcessingHandler
 
         foreach ($sensitiveFields as $field) {
             $lowerField = strtolower($field);
-            
+
             // SECURITY: Use strict matching to avoid false positives (e.g. "compass" matching "pass")
             // Matches: "password", "user_password", "password_confirmation", "api-key"
-            if ($lowerKey === $lowerField || 
-                str_ends_with($lowerKey, '_' . $lowerField) || 
+            if ($lowerKey === $lowerField ||
+                str_ends_with($lowerKey, '_' . $lowerField) ||
                 str_starts_with($lowerKey, $lowerField . '_') ||
                 str_contains($lowerKey, '_' . $lowerField . '_') ||
-                str_ends_with($lowerKey, '-' . $lowerField) || 
+                str_ends_with($lowerKey, '-' . $lowerField) ||
                 str_starts_with($lowerKey, $lowerField . '-') ||
                 str_contains($lowerKey, '-' . $lowerField . '-')) {
                 return true;
@@ -305,12 +305,14 @@ class LogShipperHandler extends AbstractProcessingHandler
             // Skip closures and resources
             if ($value instanceof \Closure || is_resource($value)) {
                 $filtered[$key] = '[FILTERED: ' . gettype($value) . ']';
+
                 continue;
             }
-            
+
             // SECURITY: Skip PDO and database connection objects to prevent credential leaks
             if ($value instanceof \PDO || $value instanceof \PDOStatement) {
                 $filtered[$key] = '[FILTERED: Database Connection]';
+
                 continue;
             }
 
@@ -326,7 +328,7 @@ class LogShipperHandler extends AbstractProcessingHandler
 
                 continue;
             }
-            
+
             // Handle other objects that might not serialize properly
             if (is_object($value)) {
                 if (method_exists($value, '__toString')) {
@@ -336,6 +338,7 @@ class LogShipperHandler extends AbstractProcessingHandler
                 } else {
                     $filtered[$key] = '[OBJECT: ' . get_class($value) . ']';
                 }
+
                 continue;
             }
 

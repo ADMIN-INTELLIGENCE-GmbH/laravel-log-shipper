@@ -2,8 +2,8 @@
 
 namespace AdminIntelligence\LogShipper\Tests\Unit;
 
-use AdminIntelligence\LogShipper\Utils\IpObfuscator;
 use AdminIntelligence\LogShipper\Tests\TestCase;
+use AdminIntelligence\LogShipper\Utils\IpObfuscator;
 
 class IpObfuscatorTest extends TestCase
 {

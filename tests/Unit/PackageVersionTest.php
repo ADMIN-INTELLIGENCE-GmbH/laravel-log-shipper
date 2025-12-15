@@ -39,7 +39,7 @@ class PackageVersionTest extends TestCase
         // Should return either a version string or 'unknown'
         // Accept: 1.0.0, dev-main, dev-feature-branch, unknown
         $this->assertTrue(
-            $version === 'unknown' || 
+            $version === 'unknown' ||
             preg_match('/^\d+\.\d+/', $version) === 1 ||
             str_starts_with($version, 'dev-'),
             "Expected version format, 'dev-*', or 'unknown', got: $version"

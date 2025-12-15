@@ -74,7 +74,7 @@ class PayloadSizeLimitTest extends TestCase
             $property = $reflection->getProperty('payload');
             $property->setAccessible(true);
             $payload = $property->getValue($job);
-            
+
             return isset($payload['_truncated'])
                 && $payload['_truncated'] === true
                 && isset($payload['_original_size'])
@@ -107,7 +107,7 @@ class PayloadSizeLimitTest extends TestCase
             $property = $reflection->getProperty('payload');
             $property->setAccessible(true);
             $payload = $property->getValue($job);
-            
+
             return !isset($payload['_truncated'])
                 && is_array($payload['context'])
                 && $payload['context']['order_id'] === 123;

@@ -57,7 +57,7 @@ class CacheBuffer implements LogBufferInterface
         if ($size <= 0 || $size > 10000) {
             return [];
         }
-        
+
         $lock = Cache::store($this->store)->lock($this->key . ':lock', 10);
         $batch = [];
         $lockAcquired = false;

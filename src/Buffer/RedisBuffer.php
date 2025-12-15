@@ -22,7 +22,7 @@ class RedisBuffer implements LogBufferInterface
         if ($size <= 0 || $size > 10000) {
             return [];
         }
-        
+
         $redis = Redis::connection($this->connection);
         $batch = [];
 
@@ -46,7 +46,7 @@ LUA;
 
         try {
             $items = $redis->eval($luaScript, 1, $this->key, $size);
-            
+
             if (is_array($items)) {
                 foreach ($items as $item) {
                     $decoded = json_decode($item, true);

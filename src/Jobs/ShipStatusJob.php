@@ -167,6 +167,7 @@ class ShipStatusJob implements ShouldQueue
             if (PHP_OS_FAMILY === 'Linux' && is_readable('/proc/loadavg')) {
                 $load = file_get_contents('/proc/loadavg');
                 $load = explode(' ', $load);
+
                 return isset($load[0]) ? (float) $load[0] : null;
             }
 
@@ -266,24 +267,24 @@ class ShipStatusJob implements ShouldQueue
     {
         try {
             $basePath = base_path();
-            
+
             if (!is_dir($basePath) || !is_readable($basePath)) {
                 return 0;
             }
-            
+
             $escapedPath = escapeshellarg($basePath);
             $output = $this->runCommandWithTimeout("cd {$escapedPath} && composer outdated --direct --format=json 2>/dev/null", 30);
-            
+
             if (!$output) {
                 return 0;
             }
 
             $data = json_decode($output, true);
-            
+
             if (!is_array($data)) {
                 return 0;
             }
-            
+
             return isset($data['installed']) && is_array($data['installed']) ? count($data['installed']) : 0;
         } catch (\Throwable) {
             return 0;
@@ -294,19 +295,20 @@ class ShipStatusJob implements ShouldQueue
     {
         try {
             $basePath = base_path();
-            
+
             if (!file_exists($basePath . '/package.json')) {
                 return 0;
             }
 
             $escapedPath = escapeshellarg($basePath);
             $output = $this->runCommandWithTimeout("cd {$escapedPath} && npm outdated --json 2>/dev/null", 30);
-            
+
             if (!$output) {
                 return 0;
             }
 
             $data = json_decode($output, true);
+
             return is_array($data) ? count($data) : 0;
         } catch (\Throwable) {
             return 0;
@@ -317,24 +319,24 @@ class ShipStatusJob implements ShouldQueue
     {
         try {
             $basePath = base_path();
-            
+
             if (!is_dir($basePath) || !is_readable($basePath)) {
                 return 0;
             }
-            
+
             $escapedPath = escapeshellarg($basePath);
             $output = $this->runCommandWithTimeout("cd {$escapedPath} && composer audit --format=json 2>/dev/null", 30);
-            
+
             if (!$output) {
                 return 0;
             }
 
             $data = json_decode($output, true);
-            
+
             if (isset($data['advisories']) && is_array($data['advisories'])) {
                 return count($data['advisories']);
             }
-            
+
             return 0;
         } catch (\Throwable) {
             return 0;
@@ -345,29 +347,30 @@ class ShipStatusJob implements ShouldQueue
     {
         try {
             $basePath = base_path();
-            
+
             if (!file_exists($basePath . '/package.json')) {
                 return 0;
             }
 
             $escapedPath = escapeshellarg($basePath);
             $output = $this->runCommandWithTimeout("cd {$escapedPath} && npm audit --json 2>/dev/null", 30);
-            
+
             if (!$output) {
                 return 0;
             }
 
             $data = json_decode($output, true);
-            
+
             if (isset($data['metadata']['vulnerabilities']) && is_array($data['metadata']['vulnerabilities'])) {
                 $vulns = $data['metadata']['vulnerabilities'];
-                return (int) (($vulns['info'] ?? 0) + 
-                       ($vulns['low'] ?? 0) + 
-                       ($vulns['moderate'] ?? 0) + 
-                       ($vulns['high'] ?? 0) + 
+
+                return (int) (($vulns['info'] ?? 0) +
+                       ($vulns['low'] ?? 0) +
+                       ($vulns['moderate'] ?? 0) +
+                       ($vulns['high'] ?? 0) +
                        ($vulns['critical'] ?? 0));
             }
-            
+
             return 0;
         } catch (\Throwable) {
             return 0;
@@ -399,13 +402,14 @@ class ShipStatusJob implements ShouldQueue
 
         while (true) {
             $elapsed = microtime(true) - $start;
-            
+
             if ($elapsed > $timeoutSeconds) {
                 proc_terminate($process);
                 fclose($pipes[0]);
                 fclose($pipes[1]);
                 fclose($pipes[2]);
                 proc_close($process);
+
                 return null;
             }
 
@@ -421,6 +425,7 @@ class ShipStatusJob implements ShouldQueue
                 fclose($pipes[1]);
                 fclose($pipes[2]);
                 proc_close($process);
+
                 return trim($output) ?: null;
             }
 
@@ -428,14 +433,12 @@ class ShipStatusJob implements ShouldQueue
         }
     }
 
-
-
     protected function getQueueMetrics(): array
     {
         try {
             $connection = config('log-shipper.queue_connection', 'default');
             $queue = config('log-shipper.queue_name', 'default');
-            
+
             return [
                 'size' => Queue::connection($connection)->size($queue),
                 'connection' => $connection,
@@ -561,7 +564,7 @@ class ShipStatusJob implements ShouldQueue
         try {
             if (class_exists(\Composer\InstalledVersions::class)) {
                 $version = \Composer\InstalledVersions::getVersion('adminintelligence/laravel-log-shipper');
-                
+
                 return $version ?? 'unknown';
             }
         } catch (\Throwable) {
