@@ -2,17 +2,17 @@
 
 namespace AdminIntelligence\LogShipper\Jobs;
 
+use AdminIntelligence\LogShipper\Jobs\Concerns\ShipsLogs;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 class ShipBatchJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ShipsLogs;
 
     /**
      * The number of times the job may be attempted.
@@ -53,47 +53,29 @@ class ShipBatchJob implements ShouldQueue
         $endpoint = config('log-shipper.api_endpoint');
         $apiKey = config('log-shipper.api_key');
 
-        if (empty($endpoint) || empty($apiKey)) {
+        if (empty($apiKey) || !$this->validateEndpoint($endpoint)) {
             return;
         }
 
         try {
-            Http::timeout($this->httpTimeout)
+            $response = Http::timeout($this->httpTimeout)
                 ->withHeaders([
                     'Accept' => 'application/json',
                     'Content-Type' => 'application/json',
                     'X-Project-Key' => $apiKey,
                 ])
-                ->post($endpoint, $this->batch)
-                ->throw();
-
-            if (config('log-shipper.circuit_breaker.enabled', false)) {
-                Cache::forget('log_shipper_failures');
+                ->post($endpoint, $this->batch);
+                
+            if (!$response->successful()) {
+                $response->throw();
             }
 
+            $this->resetCircuitBreaker();
         } catch (\Throwable $e) {
             $this->recordFailure($e);
-
             throw $e;
         }
     }
 
-    protected function recordFailure(\Throwable $e): void
-    {
-        if (!config('log-shipper.circuit_breaker.enabled', false)) {
-            return;
-        }
-
-        try {
-            $failures = Cache::increment('log_shipper_failures');
-            $threshold = config('log-shipper.circuit_breaker.failure_threshold', 5);
-
-            if ($failures >= $threshold) {
-                $duration = config('log-shipper.circuit_breaker.duration', 300);
-                Cache::put('log_shipper_dead_until', now()->addSeconds($duration), $duration);
-            }
-        } catch (\Throwable $t) {
-            // Ignore cache errors
-        }
-    }
 }
+

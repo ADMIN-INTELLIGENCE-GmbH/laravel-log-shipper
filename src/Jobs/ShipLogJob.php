@@ -2,18 +2,18 @@
 
 namespace AdminIntelligence\LogShipper\Jobs;
 
+use AdminIntelligence\LogShipper\Jobs\Concerns\ShipsLogs;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class ShipLogJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ShipsLogs;
 
     /**
      * The number of times the job may be attempted.
@@ -55,53 +55,60 @@ class ShipLogJob implements ShouldQueue
         $endpoint = config('log-shipper.api_endpoint');
         $apiKey = config('log-shipper.api_key');
 
-        if (empty($endpoint) || empty($apiKey)) {
-            // Silently fail - we don't want to log about failing to log
+        if (empty($apiKey) || !$this->validateEndpoint($endpoint)) {
             return;
         }
 
         try {
-            Http::timeout($this->httpTimeout)
+            $response = Http::timeout($this->httpTimeout)
                 ->withHeaders([
                     'Accept' => 'application/json',
                     'Content-Type' => 'application/json',
                     'X-Project-Key' => $apiKey,
                 ])
-                ->post($endpoint, $this->payload)
-                ->throw();
-
-            if (config('log-shipper.circuit_breaker.enabled', false)) {
-                Cache::forget('log_shipper_failures');
+                ->post($endpoint, $this->payload);
+                
+            if (!$response->successful()) {
+                $response->throw();
             }
 
-            // We intentionally don't check the response.
-            // If it fails, it fails. Life goes on. Probably.
+            $this->resetCircuitBreaker();
         } catch (\Throwable $e) {
             $this->recordFailure($e);
-
-            // Rethrow the exception so the queue worker knows to retry
             throw $e;
         }
     }
 
-    protected function recordFailure(\Throwable $e): void
+    /**
+     * Sanitize sensitive data recursively.
+     */
+    protected function sanitizeRecursive(array $data, array $sensitiveFields): array
     {
-        if (!config('log-shipper.circuit_breaker.enabled', false)) {
-            return;
-        }
-
-        try {
-            $failures = Cache::increment('log_shipper_failures');
-            $threshold = config('log-shipper.circuit_breaker.failure_threshold', 5);
-
-            if ($failures >= $threshold) {
-                $duration = config('log-shipper.circuit_breaker.duration', 300);
-                Cache::put('log_shipper_dead_until', now()->addSeconds($duration), $duration);
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                $data[$key] = $this->sanitizeRecursive($value, $sensitiveFields);
+            } elseif ($this->isSensitiveKey($key, $sensitiveFields)) {
+                $data[$key] = '[REDACTED]';
             }
-        } catch (\Throwable) {
-            // If the cache is down, we can't record the failure.
-            // But we shouldn't crash the job because of it.
         }
+
+        return $data;
+    }
+
+    /**
+     * Check if a key is sensitive.
+     */
+    protected function isSensitiveKey(string $key, array $sensitiveFields): bool
+    {
+        $lowerKey = strtolower($key);
+
+        foreach ($sensitiveFields as $field) {
+            if (str_contains($lowerKey, strtolower($field))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -125,7 +132,14 @@ class ShipLogJob implements ShouldQueue
 
             // Add metadata about the failure
             $context['log_shipper_failure'] = $exception?->getMessage();
-            $context['original_payload'] = $this->payload;
+            
+            // SECURITY FIX: Sanitize payload before logging to prevent exposure of sensitive data
+            $sanitizedPayload = $this->payload;
+            if (isset($sanitizedPayload['context'])) {
+                $sensitiveFields = config('log-shipper.sanitize_fields', []);
+                $sanitizedPayload['context'] = $this->sanitizeRecursive($sanitizedPayload['context'], $sensitiveFields);
+            }
+            $context['original_payload'] = $sanitizedPayload;
 
             // Ensure we don't trigger the log shipper handler again
             // by explicitly using a channel that doesn't include it, if possible.
