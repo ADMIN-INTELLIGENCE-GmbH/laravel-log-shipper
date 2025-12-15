@@ -337,6 +337,72 @@ Add additional fields to sanitize in the config file:
 ],
 ```
 
+## IP Address Obfuscation
+
+For privacy compliance (GDPR, CCPA), you can enable IP address obfuscation to anonymize client IP addresses before they are logged.
+
+### Enable IP Obfuscation
+
+Add the following to your `.env` file:
+
+```env
+LOG_SHIPPER_IP_OBFUSCATION_ENABLED=true
+LOG_SHIPPER_IP_OBFUSCATION_METHOD=mask # or 'hash'
+```
+
+### Obfuscation Methods
+
+#### Mask (Default)
+Zeroes out the last octet of IPv4 addresses and the last 64 bits of IPv6 addresses:
+
+- **IPv4:** `192.168.1.100` → `192.168.1.0`
+- **IPv6:** `2001:db8:85a3::8a2e:370:7334` → `2001:db8:85a3::`
+
+This method preserves geographic information while protecting individual privacy.
+
+#### Hash
+Generates a one-way hash of the IP address:
+
+- **IPv4:** `192.168.1.100` → `ip_a3f5c8e91d2b4f67`
+- **IPv6:** `2001:db8:85a3::8a2e:370:7334` → `ip_b9e4d1c72a8f3e56`
+
+This method provides maximum privacy while maintaining consistency (the same IP always produces the same hash).
+
+### Configuration
+
+```php
+// config/log-shipper.php
+'ip_obfuscation' => [
+    'enabled' => env('LOG_SHIPPER_IP_OBFUSCATION_ENABLED', false),
+    'method' => env('LOG_SHIPPER_IP_OBFUSCATION_METHOD', 'mask'), // 'mask' or 'hash'
+],
+```
+
+## Security Features
+
+### HTTPS Enforcement
+
+In production environments, the package **automatically enforces HTTPS** for the API endpoint. HTTP endpoints will be rejected to prevent credential leaks.
+
+```env
+# Accepted in production
+LOG_SHIPPER_ENDPOINT=https://secure.example.com/api/ingest
+
+# Rejected in production (only allowed in local/staging/testing)
+LOG_SHIPPER_ENDPOINT=http://insecure.example.com/api/ingest
+```
+
+### Payload Size Limits
+
+To prevent denial-of-service attacks via oversized log payloads, the package limits the maximum payload size:
+
+```php
+// config/log-shipper.php
+'max_payload_size' => env('LOG_SHIPPER_MAX_PAYLOAD_SIZE', 1048576), // 1MB default
+```
+
+If a payload exceeds this limit, the context will be truncated and marked with `_truncated: true`.
+
 ## Sync Mode
 
 By default, logs are shipped via queued jobs for better performance. If you prefer synchronous shipping (useful for debugging or simple setups), set:
