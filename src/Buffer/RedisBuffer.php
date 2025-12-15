@@ -18,18 +18,57 @@ class RedisBuffer implements LogBufferInterface
 
     public function popBatch(int $size): array
     {
+        // SECURITY: Validate size to prevent memory exhaustion
+        if ($size <= 0 || $size > 10000) {
+            return [];
+        }
+        
         $redis = Redis::connection($this->connection);
         $batch = [];
 
-        // We loop to ensure atomic pops without locking the whole list
-        for ($i = 0; $i < $size; $i++) {
-            $log = $redis->lpop($this->key);
+        // PERFORMANCE FIX: Use Lua script for atomic batch pop
+        // This eliminates N round-trips to Redis
+        $luaScript = <<<'LUA'
+            local key = KEYS[1]
+            local count = tonumber(ARGV[1])
+            local items = {}
+            
+            for i = 1, count do
+                local item = redis.call('LPOP', key)
+                if not item then
+                    break
+                end
+                table.insert(items, item)
+            end
+            
+            return items
+LUA;
 
-            if (!$log) {
-                break;
+        try {
+            $items = $redis->eval($luaScript, 1, $this->key, $size);
+            
+            if (is_array($items)) {
+                foreach ($items as $item) {
+                    $decoded = json_decode($item, true);
+                    if ($decoded !== null) {
+                        $batch[] = $decoded;
+                    }
+                }
             }
+        } catch (\Throwable $e) {
+            // Fallback to sequential pops if Lua script fails
+            for ($i = 0; $i < $size; $i++) {
+                $log = $redis->lpop($this->key);
 
-            $batch[] = json_decode($log, true);
+                if (!$log) {
+                    break;
+                }
+
+                $decoded = json_decode($log, true);
+                if ($decoded !== null) {
+                    $batch[] = $decoded;
+                }
+            }
         }
 
         return $batch;
