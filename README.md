@@ -480,6 +480,8 @@ LOG_SHIPPER_FALLBACK=daily
 
 When a failure occurs, the original log payload will be written to the specified channel, along with failure details in the context.
 
+> **⚠️ Important:** Do not set the fallback channel to `log_shipper` itself, as this will create an infinite loop. The package automatically prevents this scenario.
+
 ## Changelog
 
 Please see [CHANGELOG.md](CHANGELOG.md) for more information on what has changed recently.
