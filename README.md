@@ -50,6 +50,25 @@ LOG_SHIPPER_QUEUE=redis
 LOG_SHIPPER_QUEUE_NAME=logs
 ```
 
+### Upgrading Configuration
+
+If you're upgrading from a previous version and want to use the new features (IP obfuscation, enhanced status metrics, etc.), republish the configuration file:
+
+```bash
+php artisan vendor:publish --tag=log-shipper-config --force
+```
+
+> **⚠️ Warning:** This will overwrite your existing `config/log-shipper.php` file. Make sure to back up any custom configurations first, or manually merge the new options from the [published config](https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/blob/main/config/log-shipper.php).
+
+**New configuration options in recent versions:**
+- `ip_obfuscation` - Privacy-compliant IP address obfuscation
+- `max_payload_size` - Payload size limiting for security
+- `status.metrics.foldersize` - Folder size monitoring
+- `status.metrics.node_npm` - Node.js and npm version detection
+- `status.metrics.dependency_checks` - Outdated package detection
+- `status.metrics.security_audits` - Security vulnerability scanning
+- `status.monitored_folders` - Folders to monitor for size metrics
+
 ## Usage
 
 Add the log shipper channel to your `config/logging.php`:
@@ -330,7 +349,7 @@ To configure which metrics are sent or to monitor specific files/folders, publis
 ],
 ```
 
-> **⚠️ Performance Note:** The optional metrics (`node_npm`, `dependency_checks`, `security_audits`) can be slow as they execute shell commands. Enable these only if you need them and have increased the job timeout accordingly (default: 120 seconds).
+> **Performance Note:** The optional metrics (`node_npm`, `dependency_checks`, `security_audits`) can be slow as they execute shell commands. Enable these only if you need them and have increased the job timeout accordingly (default: 120 seconds).
 
 > **Note:** Status pushing relies on Laravel's scheduler. Ensure you have the scheduler running:
 > `* * * * * cd /path-to-your-project && php artisan schedule:run >> /dev/null 2>&1`
