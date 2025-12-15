@@ -54,10 +54,15 @@ class LogShipperServiceProvider extends ServiceProvider
         $schedule = $this->app->make(\Illuminate\Console\Scheduling\Schedule::class);
         $interval = (int) config('log-shipper.batch.interval', 1);
 
-        // Ensure interval is at least 1 minute
-        $interval = max(1, $interval);
+        // Ensure interval is at least 1 minute and max 59 (cron limitation)
+        $interval = max(1, min(59, $interval));
 
-        $schedule->command('log-shipper:ship-batch')->cron("*/{$interval} * * * *");
+        // Use everyMinute() for interval of 1 to avoid cron syntax issues
+        if ($interval === 1) {
+            $schedule->command('log-shipper:ship-batch')->everyMinute();
+        } else {
+            $schedule->command('log-shipper:ship-batch')->cron("*/{$interval} * * * *");
+        }
     }
 
     protected function scheduleStatusPush(): void
@@ -77,11 +82,16 @@ class LogShipperServiceProvider extends ServiceProvider
             $schedule->command('log-shipper:status')->daily();
         } elseif ($minutes >= 60) {
             // Hourly (or every N hours)
-            $hours = intdiv($minutes, 60);
+            $hours = max(1, min(23, intdiv($minutes, 60)));
             $schedule->command('log-shipper:status')->cron("0 */{$hours} * * *");
         } else {
-            // Every N minutes
-            $schedule->command('log-shipper:status')->cron("*/{$minutes} * * * *");
+            // Every N minutes (cap at 59 for valid cron)
+            $minutes = min(59, $minutes);
+            if ($minutes === 1) {
+                $schedule->command('log-shipper:status')->everyMinute();
+            } else {
+                $schedule->command('log-shipper:status')->cron("*/{$minutes} * * * *");
+            }
         }
     }
 

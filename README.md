@@ -210,7 +210,9 @@ Here is an example of the JSON payload sent for a status update:
     "timestamp": "2025-12-11T14:30:45+00:00",
     "app_name": "Laravel",
     "app_env": "production",
+    "app_debug": false,
     "instance_id": "web-server-01",
+    "log_shipper_version": "1.0.0",
     "system": {
         "memory_usage": 25165824,
         "memory_peak": 26214400,
@@ -220,6 +222,7 @@ Here is an example of the JSON payload sent for a status update:
             "used": 12884901888,
             "percent_used": 75.0
         },
+        "cpu_usage": 12.5,
         "php_version": "8.3.0",
         "laravel_version": "11.0.0",
         "uptime": 86400,
@@ -232,17 +235,18 @@ Here is an example of the JSON payload sent for a status update:
     },
     "queue": {
         "size": 15,
-        "connection": "redis"
+        "connection": "redis",
+        "queue": "default"
     },
     "database": {
         "status": "connected",
         "latency_ms": 1.2
     },
-    "cache": {
-        "driver": "redis"
-    },
     "filesize": {
         "laravel.log": 102400
+    },
+    "foldersize": {
+        "logs": 5242880
     }
 }
 ```
@@ -257,10 +261,17 @@ The status payload includes the following system metrics:
 | `memory_usage` | int | Current memory usage of the PHP process (bytes) |
 | `memory_peak` | int | Peak memory usage of the PHP process (bytes) |
 | `server_memory` | object | Server-level RAM metrics (see below) |
+| `cpu_usage` | float\|null | CPU usage percentage or load average |
 | `php_version` | string | PHP version |
 | `laravel_version` | string | Laravel framework version |
 | `uptime` | int\|null | System uptime in seconds (null if unavailable) |
 | `disk_space` | object | Disk space metrics for monitored path |
+| `node_version` | string\|null | Node.js version (if enabled) |
+| `npm_version` | string\|null | npm version (if enabled) |
+| `composer_outdated` | int | Count of outdated Composer packages (if enabled) |
+| `npm_outdated` | int | Count of outdated npm packages (if enabled) |
+| `composer_audit` | int | Count of Composer security advisories (if enabled) |
+| `npm_audit` | int | Count of npm security vulnerabilities (if enabled) |
 
 #### Server Memory Object
 | Field | Type | Description |
@@ -286,7 +297,10 @@ The status payload includes the following system metrics:
 #### Filesize Object
 - **Files**: Sizes of specific monitored files (configurable)
 
-To configure which metrics are sent or to monitor specific files, publish the config and update the `status` section:
+#### Foldersize Object
+- **Folders**: Total sizes of specific monitored folders, including all nested files (configurable)
+
+To configure which metrics are sent or to monitor specific files/folders, publish the config and update the `status` section:
 
 ```php
 'status' => [
@@ -294,18 +308,29 @@ To configure which metrics are sent or to monitor specific files, publish the co
         'system' => true,
         'queue' => true,
         'database' => true,
-        'cache' => true,
+        'cache' => false,
         'filesize' => true,
+        'foldersize' => true,
+        
+        // Optional expensive metrics (disabled by default)
+        'node_npm' => false,              // Node.js and npm versions
+        'dependency_checks' => false,     // Outdated package counts
+        'security_audits' => false,       // Security vulnerability counts
     ],
-
-    'monitored_disk_path' => '/',
 
     'monitored_files' => [
         storage_path('logs/laravel.log'),
         storage_path('logs/worker.log'),
     ],
+    
+    'monitored_folders' => [
+        storage_path('logs'),
+        storage_path('app/cache'),
+    ],
 ],
 ```
+
+> **⚠️ Performance Note:** The optional metrics (`node_npm`, `dependency_checks`, `security_audits`) can be slow as they execute shell commands. Enable these only if you need them and have increased the job timeout accordingly (default: 120 seconds).
 
 > **Note:** Status pushing relies on Laravel's scheduler. Ensure you have the scheduler running:
 > `* * * * * cd /path-to-your-project && php artisan schedule:run >> /dev/null 2>&1`
@@ -480,7 +505,7 @@ LOG_SHIPPER_FALLBACK=daily
 
 When a failure occurs, the original log payload will be written to the specified channel, along with failure details in the context.
 
-> **⚠️ Important:** Do not set the fallback channel to `log_shipper` itself, as this will create an infinite loop. The package automatically prevents this scenario.
+> **Important:** Do not set the fallback channel to `log_shipper` itself, as this will create an infinite loop. The package automatically prevents this scenario.
 
 ## Changelog
 
