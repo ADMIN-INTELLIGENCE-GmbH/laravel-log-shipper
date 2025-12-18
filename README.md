@@ -110,6 +110,8 @@ Log::error('Something went wrong', ['order_id' => 123]);
 | `backoff` | Wait time between retries (seconds) | `[2, 5, 10]` |
 | `circuit_breaker` | Circuit breaker configuration | `enabled` |
 | `fallback_channel` | Local channel to use if shipping fails | `null` |
+| `ip_obfuscation` | IP address obfuscation settings | `disabled` |
+| `max_payload_size` | Max payload size in bytes | `1048576` |
 | `sanitize_fields` | Fields to redact from logs | See config |
 | `send_context` | Context data to include | See config |
 
@@ -226,46 +228,51 @@ Here is an example of the JSON payload sent for a status update:
 
 ```json
 {
-    "timestamp": "2025-12-11T14:30:45+00:00",
-    "app_name": "Laravel",
-    "app_env": "production",
-    "app_debug": false,
-    "instance_id": "web-server-01",
-    "log_shipper_version": "1.0.0",
+    "timestamp": "2025-12-18T16:53:12+00:00",
+    "app_name": "ticket",
+    "app_env": "local",
+    "app_debug": true,
+    "instance_id": "Boxxy",
+    "log_shipper_version": "1.2.0",
     "system": {
-        "memory_usage": 25165824,
-        "memory_peak": 26214400,
+        "memory_usage": 33554432,
+        "memory_peak": 33554432,
         "server_memory": {
-            "total": 17179869184,
-            "free": 4294967296,
-            "used": 12884901888,
-            "percent_used": 75.0
+            "total": 26841100288,
+            "free": 23864168448,
+            "used": 2976931840,
+            "percent_used": 11.09
         },
-        "cpu_usage": 12.5,
-        "php_version": "8.3.0",
-        "laravel_version": "11.0.0",
-        "uptime": 86400,
+        "cpu_usage": 0.18,
+        "php_version": "8.4.15",
+        "laravel_version": "12.42.0",
+        "uptime": 25162,
         "disk_space": {
-            "total": 100000000000,
-            "free": 60000000000,
-            "used": 40000000000,
-            "percent_used": 40.0
-        }
+            "total": 269490393088,
+            "free": 239698132992,
+            "used": 29792260096,
+            "percent_used": 11.06
+        },
+        "node_version": "v24.11.1",
+        "npm_version": "11.6.2",
+        "composer_outdated": 6,
+        "npm_outdated": 9,
+        "composer_audit": 0,
+        "npm_audit": 0
     },
     "queue": {
-        "size": 15,
-        "connection": "redis",
-        "queue": "default"
+        "error": "Could not fetch queue metrics"
     },
     "database": {
         "status": "connected",
-        "latency_ms": 1.2
+        "latency_ms": 8.51
     },
-    "filesize": {
-        "laravel.log": 102400
-    },
+    "cache": [],
+    "filesize": [],
     "foldersize": {
-        "logs": 5242880
+        "upload": -1,
+        "cache": 523732,
+        "email-assets": -1
     }
 }
 ```
@@ -273,6 +280,16 @@ Here is an example of the JSON payload sent for a status update:
 ### System Metrics Details
 
 The status payload includes the following system metrics:
+
+#### Core Status Data
+| Field | Type | Description |
+|-------|------|-------------|
+| `timestamp` | string | ISO-8601 timestamp of the report |
+| `app_name` | string | Application name from `config('app.name')` |
+| `app_env` | string | Application environment (local, production, etc.) |
+| `app_debug` | bool | Whether debug mode is enabled |
+| `instance_id` | string | Hostname of the server |
+| `log_shipper_version` | string | Version of the log shipper package |
 
 #### System Object
 | Field | Type | Description |
