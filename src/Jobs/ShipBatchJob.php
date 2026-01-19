@@ -65,7 +65,7 @@ class ShipBatchJob implements ShouldQueue
                     'X-Project-Key' => $apiKey,
                 ])
                 ->post($endpoint, $this->batch);
-                
+
             if (!$response->successful()) {
                 $response->throw();
             }
@@ -76,6 +76,4 @@ class ShipBatchJob implements ShouldQueue
             throw $e;
         }
     }
-
 }
-

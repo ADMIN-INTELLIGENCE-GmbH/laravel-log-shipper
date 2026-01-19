@@ -44,17 +44,17 @@ class FallbackChannelTest extends TestCase
     {
         // This test verifies the protection exists by checking the actual code
         // We can't test dispatch failure with Queue::fake() since it prevents errors
-        
+
         Config::set('log-shipper.fallback_channel', 'log_shipper');
-        
+
         $handler = new LogShipperHandler(Level::Error);
         $reflection = new \ReflectionClass($handler);
         $method = $reflection->getMethod('write');
         $method->setAccessible(true);
-        
+
         // Read the method source to verify protection exists
         $source = file_get_contents($reflection->getFileName());
-        
+
         // Verify the code contains the protection check
         $this->assertStringContainsString('&& $fallbackChannel !== \'log_shipper\'', $source);
     }
@@ -112,6 +112,7 @@ class FallbackChannelTest extends TestCase
             ->once()
             ->with('error', 'Test', \Mockery::on(function ($context) {
                 $payload = $context['original_payload'] ?? [];
+
                 return isset($payload['context'])
                     && $payload['context']['user_password'] === '[REDACTED]'
                     && $payload['context']['api_secret'] === '[REDACTED]'

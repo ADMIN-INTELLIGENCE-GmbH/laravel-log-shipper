@@ -67,7 +67,7 @@ class ShipLogJob implements ShouldQueue
                     'X-Project-Key' => $apiKey,
                 ])
                 ->post($endpoint, $this->payload);
-                
+
             if (!$response->successful()) {
                 $response->throw();
             }
@@ -132,7 +132,7 @@ class ShipLogJob implements ShouldQueue
 
             // Add metadata about the failure
             $context['log_shipper_failure'] = $exception?->getMessage();
-            
+
             // SECURITY FIX: Sanitize payload before logging to prevent exposure of sensitive data
             $sanitizedPayload = $this->payload;
             if (isset($sanitizedPayload['context'])) {

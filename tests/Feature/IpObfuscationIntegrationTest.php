@@ -40,7 +40,7 @@ class IpObfuscationIntegrationTest extends TestCase
             $payload = $this->getJobPayload($job);
 
             // Should have an IP address that looks masked
-            return isset($payload['ip_address']) && 
+            return isset($payload['ip_address']) &&
                    is_string($payload['ip_address']);
         });
     }
@@ -59,8 +59,8 @@ class IpObfuscationIntegrationTest extends TestCase
         Queue::assertPushed(ShipLogJob::class, function ($job) {
             $payload = $this->getJobPayload($job);
 
-            return isset($payload['ip_address']) && 
-                   (str_starts_with($payload['ip_address'], 'ip_') || 
+            return isset($payload['ip_address']) &&
+                   (str_starts_with($payload['ip_address'], 'ip_') ||
                     is_null($payload['ip_address']) ||
                     $payload['ip_address'] === '');
         });

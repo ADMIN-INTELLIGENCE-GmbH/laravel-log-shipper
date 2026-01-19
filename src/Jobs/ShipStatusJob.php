@@ -167,6 +167,7 @@ class ShipStatusJob implements ShouldQueue
             if (PHP_OS_FAMILY === 'Linux' && is_readable('/proc/loadavg')) {
                 $load = file_get_contents('/proc/loadavg');
                 $load = explode(' ', $load);
+
                 return isset($load[0]) ? (float) $load[0] : null;
             }
 
@@ -227,21 +228,91 @@ class ShipStatusJob implements ShouldQueue
 
     protected function getDiskSpace(): array
     {
+        $primary = ['total' => null, 'free' => null, 'used' => null, 'percent_used' => null];
+        $disks = [];
+
+        // 1. Get primary disk info (backward compatibility)
         try {
             $path = base_path();
             $total = disk_total_space($path);
             $free = disk_free_space($path);
             $used = $total - $free;
 
-            return [
+            $primary = [
                 'total' => $total,
                 'free' => $free,
                 'used' => $used,
                 'percent_used' => $total > 0 ? round(($used / $total) * 100, 2) : 0,
             ];
         } catch (\Throwable) {
-            return ['total' => null, 'free' => null, 'used' => null, 'percent_used' => null];
+            // Leave as nulls
         }
+
+        // 2. Get all mounted filesystems
+        try {
+            if (PHP_OS_FAMILY === 'Windows') {
+                $output = $this->runCommandWithTimeout('wmic logicaldisk get Caption,FreeSpace,Size /format:csv', 5);
+                if ($output) {
+                    $lines = explode("\n", trim($output));
+                    foreach ($lines as $line) {
+                        $line = trim($line);
+                        if (empty($line)) {
+                            continue;
+                        }
+
+                        $parts = str_getcsv($line);
+                        // Skip headers or invalid lines
+                        if (isset($parts[1]) && $parts[1] === 'Caption') {
+                            continue;
+                        }
+
+                        // Node, Caption, FreeSpace, Size
+                        if (count($parts) >= 4) {
+                            $model_total = (float) $parts[3];
+                            $model_free = (float) $parts[2];
+                            $model_used = $model_total - $model_free;
+                            $disks[] = [
+                                'path' => $parts[1],
+                                'total' => $model_total,
+                                'free' => $model_free,
+                                'used' => $model_used,
+                                'percent_used' => $model_total > 0 ? round(($model_used / $model_total) * 100, 2) : 0,
+                            ];
+                        }
+                    }
+                }
+            } else {
+                // Linux / macOS (Use -k for 1024-byte blocks, -P for POSIX portability)
+                $output = $this->runCommandWithTimeout('df -kP', 5);
+                if ($output) {
+                    $lines = explode("\n", trim($output));
+                    array_shift($lines); // Remove header
+
+                    foreach ($lines as $line) {
+                        $parts = preg_split('/\s+/', trim($line));
+
+                        if (count($parts) >= 6) {
+                            $model_total = (float) $parts[1] * 1024;
+                            $model_used = (float) $parts[2] * 1024;
+                            $model_free = (float) $parts[3] * 1024;
+                            $mount = implode(' ', array_slice($parts, 5));
+
+                            $disks[] = [
+                                'path' => $mount,
+                                'total' => $model_total,
+                                'free' => $model_free,
+                                'used' => $model_used,
+                                'percent_used' => $model_total > 0 ? round(($model_used / $model_total) * 100, 2) : 0,
+                            ];
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable) {
+            // Fail silently
+        }
+
+        return array_merge($primary, ['disks' => $disks]);
     }
 
     protected function getNodeVersion(): ?string
@@ -266,24 +337,24 @@ class ShipStatusJob implements ShouldQueue
     {
         try {
             $basePath = base_path();
-            
+
             if (!is_dir($basePath) || !is_readable($basePath)) {
                 return 0;
             }
-            
+
             $escapedPath = escapeshellarg($basePath);
             $output = $this->runCommandWithTimeout("cd {$escapedPath} && composer outdated --direct --format=json 2>/dev/null", 30);
-            
+
             if (!$output) {
                 return 0;
             }
 
             $data = json_decode($output, true);
-            
+
             if (!is_array($data)) {
                 return 0;
             }
-            
+
             return isset($data['installed']) && is_array($data['installed']) ? count($data['installed']) : 0;
         } catch (\Throwable) {
             return 0;
@@ -294,19 +365,20 @@ class ShipStatusJob implements ShouldQueue
     {
         try {
             $basePath = base_path();
-            
+
             if (!file_exists($basePath . '/package.json')) {
                 return 0;
             }
 
             $escapedPath = escapeshellarg($basePath);
             $output = $this->runCommandWithTimeout("cd {$escapedPath} && npm outdated --json 2>/dev/null", 30);
-            
+
             if (!$output) {
                 return 0;
             }
 
             $data = json_decode($output, true);
+
             return is_array($data) ? count($data) : 0;
         } catch (\Throwable) {
             return 0;
@@ -317,24 +389,24 @@ class ShipStatusJob implements ShouldQueue
     {
         try {
             $basePath = base_path();
-            
+
             if (!is_dir($basePath) || !is_readable($basePath)) {
                 return 0;
             }
-            
+
             $escapedPath = escapeshellarg($basePath);
             $output = $this->runCommandWithTimeout("cd {$escapedPath} && composer audit --format=json 2>/dev/null", 30);
-            
+
             if (!$output) {
                 return 0;
             }
 
             $data = json_decode($output, true);
-            
+
             if (isset($data['advisories']) && is_array($data['advisories'])) {
                 return count($data['advisories']);
             }
-            
+
             return 0;
         } catch (\Throwable) {
             return 0;
@@ -345,29 +417,30 @@ class ShipStatusJob implements ShouldQueue
     {
         try {
             $basePath = base_path();
-            
+
             if (!file_exists($basePath . '/package.json')) {
                 return 0;
             }
 
             $escapedPath = escapeshellarg($basePath);
             $output = $this->runCommandWithTimeout("cd {$escapedPath} && npm audit --json 2>/dev/null", 30);
-            
+
             if (!$output) {
                 return 0;
             }
 
             $data = json_decode($output, true);
-            
+
             if (isset($data['metadata']['vulnerabilities']) && is_array($data['metadata']['vulnerabilities'])) {
                 $vulns = $data['metadata']['vulnerabilities'];
-                return (int) (($vulns['info'] ?? 0) + 
-                       ($vulns['low'] ?? 0) + 
-                       ($vulns['moderate'] ?? 0) + 
-                       ($vulns['high'] ?? 0) + 
+
+                return (int) (($vulns['info'] ?? 0) +
+                       ($vulns['low'] ?? 0) +
+                       ($vulns['moderate'] ?? 0) +
+                       ($vulns['high'] ?? 0) +
                        ($vulns['critical'] ?? 0));
             }
-            
+
             return 0;
         } catch (\Throwable) {
             return 0;
@@ -399,13 +472,14 @@ class ShipStatusJob implements ShouldQueue
 
         while (true) {
             $elapsed = microtime(true) - $start;
-            
+
             if ($elapsed > $timeoutSeconds) {
                 proc_terminate($process);
                 fclose($pipes[0]);
                 fclose($pipes[1]);
                 fclose($pipes[2]);
                 proc_close($process);
+
                 return null;
             }
 
@@ -421,6 +495,7 @@ class ShipStatusJob implements ShouldQueue
                 fclose($pipes[1]);
                 fclose($pipes[2]);
                 proc_close($process);
+
                 return trim($output) ?: null;
             }
 
@@ -428,14 +503,12 @@ class ShipStatusJob implements ShouldQueue
         }
     }
 
-
-
     protected function getQueueMetrics(): array
     {
         try {
             $connection = config('log-shipper.queue_connection', 'default');
             $queue = config('log-shipper.queue_name', 'default');
-            
+
             return [
                 'size' => Queue::connection($connection)->size($queue),
                 'connection' => $connection,
@@ -561,7 +634,7 @@ class ShipStatusJob implements ShouldQueue
         try {
             if (class_exists(\Composer\InstalledVersions::class)) {
                 $version = \Composer\InstalledVersions::getVersion('adminintelligence/laravel-log-shipper');
-                
+
                 return $version ?? 'unknown';
             }
         } catch (\Throwable) {
