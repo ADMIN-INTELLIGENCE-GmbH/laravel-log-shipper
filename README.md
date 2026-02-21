@@ -233,7 +233,7 @@ Here is an example of the JSON payload sent for a status update:
     "app_env": "local",
     "app_debug": true,
     "instance_id": "Boxxy",
-    "log_shipper_version": "1.2.0",
+    "log_shipper_version": "1.3.0",
     "system": {
         "memory_usage": 33554432,
         "memory_peak": 33554432,
@@ -251,7 +251,23 @@ Here is an example of the JSON payload sent for a status update:
             "total": 269490393088,
             "free": 239698132992,
             "used": 29792260096,
-            "percent_used": 11.06
+            "percent_used": 11.06,
+            "disks": [
+                {
+                    "path": "/",
+                    "total": 269490393088,
+                    "free": 239698132992,
+                    "used": 29792260096,
+                    "percent_used": 11.06
+                },
+                {
+                    "path": "/boot/efi",
+                    "total": 536870912,
+                    "free": 499122176,
+                    "used": 37748736,
+                    "percent_used": 7.03
+                }
+            ]
         },
         "node_version": "v24.11.1",
         "npm_version": "11.6.2",
@@ -301,7 +317,7 @@ The status payload includes the following system metrics:
 | `php_version` | string | PHP version |
 | `laravel_version` | string | Laravel framework version |
 | `uptime` | int\|null | System uptime in seconds (null if unavailable) |
-| `disk_space` | object | Disk space metrics for monitored path |
+| `disk_space` | object | Primary disk metrics + `disks` array of all mounted filesystems |
 | `node_version` | string\|null | Node.js version (if enabled) |
 | `npm_version` | string\|null | npm version (if enabled) |
 | `composer_outdated` | int | Count of outdated Composer packages (if enabled) |
@@ -318,6 +334,24 @@ The status payload includes the following system metrics:
 | `percent_used` | float\|null | Percentage of RAM in use |
 
 > **Note on macOS:** The `percent_used` includes filesystem cache. This is normal macOS behavior and does not indicate memory pressure.
+
+#### Disk Space Object
+| Field | Type | Description |
+|-------|------|-------------|
+| `total` | int\|null | Total size of the primary disk (bytes) |
+| `free` | int\|null | Free space on the primary disk (bytes) |
+| `used` | int\|null | Used space on the primary disk (bytes) |
+| `percent_used` | float\|null | Percentage of primary disk in use |
+| `disks` | array | One entry per mounted filesystem (see below) |
+
+Each entry in `disks` contains:
+| Field | Type | Description |
+|-------|------|-------------|
+| `path` | string | Mount point (e.g. `/`, `/boot/efi`, `C:`) |
+| `total` | float | Total size of the filesystem (bytes) |
+| `free` | float | Free space on the filesystem (bytes) |
+| `used` | float | Used space on the filesystem (bytes) |
+| `percent_used` | float | Percentage of the filesystem in use |
 
 #### Queue Object
 - **Size**: Queue jobs count (excluding the status job itself)

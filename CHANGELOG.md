@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-02-21
+
+### Added
+- **All-Disk Monitoring**: `disk_space` in the status payload now includes a `disks` array containing metrics for every mounted filesystem (Linux/macOS via `df -kP`, Windows via `wmic`). The top-level `total`, `free`, `used`, and `percent_used` fields are preserved for backward compatibility.
+
+### Changed
+- **Disk Space Payload Structure**: `system.disk_space` now returns an object with both the primary-disk fields (`total`, `free`, `used`, `percent_used`) and a `disks` array, each entry containing `path`, `total`, `free`, `used`, and `percent_used`.
+
 ## [1.2.0] - 2025-12-18
 
 ### Added
@@ -68,7 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Request context collection (user ID, IP, user agent, route, etc.)
 - Laravel 10, 11, and 12 support
 
-[Unreleased]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.3.0
 [1.2.0]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.2.0
 [1.1.0]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.1.0
 [1.0.1]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.0.1
