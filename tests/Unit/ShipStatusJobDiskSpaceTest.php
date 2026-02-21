@@ -29,8 +29,8 @@ class ShipStatusJobDiskSpaceTest extends TestCase
         Http::assertSent(function ($request) {
             $data = $request->data();
             $system = $data['system'];
-            
-            if (! isset($system['disk_space'])) {
+
+            if (!isset($system['disk_space'])) {
                 return false;
             }
 
@@ -40,16 +40,16 @@ class ShipStatusJobDiskSpaceTest extends TestCase
             $hasPrimary = array_key_exists('total', $diskSpace)
                 && array_key_exists('free', $diskSpace)
                 && array_key_exists('used', $diskSpace);
-            
+
             // Check for disks array
             $hasDisks = isset($diskSpace['disks']) && is_array($diskSpace['disks']);
 
             if ($hasDisks) {
-                 foreach ($diskSpace['disks'] as $disk) {
-                     if (! isset($disk['path'], $disk['total'], $disk['free'], $disk['used'])) {
-                         return false;
-                     }
-                 }
+                foreach ($diskSpace['disks'] as $disk) {
+                    if (!isset($disk['path'], $disk['total'], $disk['free'], $disk['used'])) {
+                        return false;
+                    }
+                }
             }
 
             return $hasPrimary && $hasDisks;
