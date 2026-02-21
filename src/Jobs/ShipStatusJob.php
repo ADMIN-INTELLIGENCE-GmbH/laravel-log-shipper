@@ -228,21 +228,91 @@ class ShipStatusJob implements ShouldQueue
 
     protected function getDiskSpace(): array
     {
+        $primary = ['total' => null, 'free' => null, 'used' => null, 'percent_used' => null];
+        $disks = [];
+
+        // 1. Get primary disk info (backward compatibility)
         try {
             $path = base_path();
             $total = disk_total_space($path);
             $free = disk_free_space($path);
             $used = $total - $free;
 
-            return [
+            $primary = [
                 'total' => $total,
                 'free' => $free,
                 'used' => $used,
                 'percent_used' => $total > 0 ? round(($used / $total) * 100, 2) : 0,
             ];
         } catch (\Throwable) {
-            return ['total' => null, 'free' => null, 'used' => null, 'percent_used' => null];
+            // Leave as nulls
         }
+
+        // 2. Get all mounted filesystems
+        try {
+            if (PHP_OS_FAMILY === 'Windows') {
+                $output = $this->runCommandWithTimeout('wmic logicaldisk get Caption,FreeSpace,Size /format:csv', 5);
+                if ($output) {
+                    $lines = explode("\n", trim($output));
+                    foreach ($lines as $line) {
+                        $line = trim($line);
+                        if (empty($line)) {
+                            continue;
+                        }
+
+                        $parts = str_getcsv($line);
+                        // Skip headers or invalid lines
+                        if (isset($parts[1]) && $parts[1] === 'Caption') {
+                            continue;
+                        }
+
+                        // Node, Caption, FreeSpace, Size
+                        if (count($parts) >= 4) {
+                            $model_total = (float) $parts[3];
+                            $model_free = (float) $parts[2];
+                            $model_used = $model_total - $model_free;
+                            $disks[] = [
+                                'path' => $parts[1],
+                                'total' => $model_total,
+                                'free' => $model_free,
+                                'used' => $model_used,
+                                'percent_used' => $model_total > 0 ? round(($model_used / $model_total) * 100, 2) : 0,
+                            ];
+                        }
+                    }
+                }
+            } else {
+                // Linux / macOS (Use -k for 1024-byte blocks, -P for POSIX portability)
+                $output = $this->runCommandWithTimeout('df -kP', 5);
+                if ($output) {
+                    $lines = explode("\n", trim($output));
+                    array_shift($lines); // Remove header
+
+                    foreach ($lines as $line) {
+                        $parts = preg_split('/\s+/', trim($line));
+
+                        if (count($parts) >= 6) {
+                            $model_total = (float) $parts[1] * 1024;
+                            $model_used = (float) $parts[2] * 1024;
+                            $model_free = (float) $parts[3] * 1024;
+                            $mount = implode(' ', array_slice($parts, 5));
+
+                            $disks[] = [
+                                'path' => $mount,
+                                'total' => $model_total,
+                                'free' => $model_free,
+                                'used' => $model_used,
+                                'percent_used' => $model_total > 0 ? round(($model_used / $model_total) * 100, 2) : 0,
+                            ];
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable) {
+            // Fail silently
+        }
+
+        return array_merge($primary, ['disks' => $disks]);
     }
 
     protected function getNodeVersion(): ?string
