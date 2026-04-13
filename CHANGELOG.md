@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-04-13
+
+### Added
+- **Laravel 13 Support**: Added compatibility with Laravel 13 (`illuminate/*` `^13.0`). Supports Laravel 10, 11, 12, and 13.
+
 ### Added
 - **IP Address Obfuscation**: Added privacy-compliant IP obfuscation with two methods: `mask` (zeros last octet/64 bits) and `hash` (one-way hash). Configurable via `ip_obfuscation.enabled` and `ip_obfuscation.method`.
 - **HTTPS Enforcement**: Production environments now automatically reject HTTP endpoints and require HTTPS to prevent credential leaks.
