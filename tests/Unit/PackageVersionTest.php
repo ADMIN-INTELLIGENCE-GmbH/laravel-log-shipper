@@ -1,9 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace AdminIntelligence\LogShipper\Tests\Unit;
 
 use AdminIntelligence\LogShipper\Jobs\ShipStatusJob;
 use AdminIntelligence\LogShipper\Tests\TestCase;
+use Composer\InstalledVersions;
 use PHPUnit\Framework\Attributes\Test;
 use ReflectionClass;
 
@@ -25,7 +28,7 @@ class PackageVersionTest extends TestCase
     #[Test]
     public function get_package_version_uses_composer_installed_versions()
     {
-        if (!class_exists(\Composer\InstalledVersions::class)) {
+        if (!class_exists(InstalledVersions::class)) {
             $this->markTestSkipped('Composer\InstalledVersions not available');
         }
 

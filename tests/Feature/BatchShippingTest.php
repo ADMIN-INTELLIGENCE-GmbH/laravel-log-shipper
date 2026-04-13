@@ -1,14 +1,18 @@
 <?php
 
+declare(strict_types=1);
+
 namespace AdminIntelligence\LogShipper\Tests\Feature;
 
 use AdminIntelligence\LogShipper\Jobs\ShipBatchJob;
+use AdminIntelligence\LogShipper\Logging\CreateCustomLogger;
 use AdminIntelligence\LogShipper\Tests\TestCase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Redis;
+use Mockery;
 
 class BatchShippingTest extends TestCase
 {
@@ -27,7 +31,7 @@ class BatchShippingTest extends TestCase
         ]);
         Config::set('logging.channels.log_shipper', [
             'driver' => 'custom',
-            'via' => \AdminIntelligence\LogShipper\Logging\CreateCustomLogger::class,
+            'via' => CreateCustomLogger::class,
             'level' => 'debug',
         ]);
     }
@@ -42,7 +46,7 @@ class BatchShippingTest extends TestCase
 
         Redis::shouldReceive('rpush')
             ->once()
-            ->with('test_buffer', \Mockery::on(function ($arg) {
+            ->with('test_buffer', Mockery::on(function ($arg) {
                 $json = json_decode($arg, true);
 
                 return $json['message'] === 'Test batch log';

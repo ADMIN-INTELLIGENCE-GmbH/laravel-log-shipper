@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace AdminIntelligence\LogShipper\Tests\Unit;
 
+use AdminIntelligence\LogShipper\Jobs\ShipLogJob;
 use AdminIntelligence\LogShipper\Logging\LogShipperHandler;
 use AdminIntelligence\LogShipper\Tests\TestCase;
 use DateTimeImmutable;
@@ -10,6 +13,7 @@ use Illuminate\Support\Facades\Queue;
 use Monolog\Level;
 use Monolog\LogRecord;
 use PHPUnit\Framework\Attributes\Test;
+use ReflectionClass;
 
 class PayloadSizeLimitTest extends TestCase
 {
@@ -45,7 +49,7 @@ class PayloadSizeLimitTest extends TestCase
         $handler->handle($record);
 
         // Verify job was still dispatched (with truncated payload)
-        Queue::assertPushed(\AdminIntelligence\LogShipper\Jobs\ShipLogJob::class);
+        Queue::assertPushed(ShipLogJob::class);
     }
 
     #[Test]
@@ -68,9 +72,9 @@ class PayloadSizeLimitTest extends TestCase
 
         $handler->handle($record);
 
-        Queue::assertPushed(\AdminIntelligence\LogShipper\Jobs\ShipLogJob::class, function ($job) {
+        Queue::assertPushed(ShipLogJob::class, function ($job) {
             // Use reflection to access protected property
-            $reflection = new \ReflectionClass($job);
+            $reflection = new ReflectionClass($job);
             $property = $reflection->getProperty('payload');
             $property->setAccessible(true);
             $payload = $property->getValue($job);
@@ -102,8 +106,8 @@ class PayloadSizeLimitTest extends TestCase
 
         $handler->handle($record);
 
-        Queue::assertPushed(\AdminIntelligence\LogShipper\Jobs\ShipLogJob::class, function ($job) {
-            $reflection = new \ReflectionClass($job);
+        Queue::assertPushed(ShipLogJob::class, function ($job) {
+            $reflection = new ReflectionClass($job);
             $property = $reflection->getProperty('payload');
             $property->setAccessible(true);
             $payload = $property->getValue($job);
@@ -126,7 +130,7 @@ class PayloadSizeLimitTest extends TestCase
         // Should not throw exception
         $handler->handle($record);
 
-        Queue::assertPushed(\AdminIntelligence\LogShipper\Jobs\ShipLogJob::class);
+        Queue::assertPushed(ShipLogJob::class);
     }
 
     #[Test]
@@ -140,7 +144,7 @@ class PayloadSizeLimitTest extends TestCase
         $handler->handle($record);
 
         // Should still dispatch (but would be truncated)
-        Queue::assertPushed(\AdminIntelligence\LogShipper\Jobs\ShipLogJob::class);
+        Queue::assertPushed(ShipLogJob::class);
     }
 
     #[Test]
@@ -162,7 +166,7 @@ class PayloadSizeLimitTest extends TestCase
 
         $handler->handle($record);
 
-        Queue::assertPushed(\AdminIntelligence\LogShipper\Jobs\ShipLogJob::class);
+        Queue::assertPushed(ShipLogJob::class);
     }
 
     #[Test]
@@ -189,7 +193,7 @@ class PayloadSizeLimitTest extends TestCase
         $handler->handle($record);
 
         // Should handle gracefully and dispatch
-        Queue::assertPushed(\AdminIntelligence\LogShipper\Jobs\ShipLogJob::class);
+        Queue::assertPushed(ShipLogJob::class);
     }
 
     protected function createLogRecord(string $message, Level $level): LogRecord

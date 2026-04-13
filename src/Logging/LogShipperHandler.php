@@ -1,17 +1,25 @@
 <?php
 
+declare(strict_types=1);
+
 namespace AdminIntelligence\LogShipper\Logging;
 
 use AdminIntelligence\LogShipper\Buffer\LogBufferInterface;
 use AdminIntelligence\LogShipper\Jobs\ShipLogJob;
 use AdminIntelligence\LogShipper\Utils\IpObfuscator;
+use Closure;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Request;
 use Illuminate\Support\Facades\Route;
+use JsonSerializable;
 use Monolog\Handler\AbstractProcessingHandler;
 use Monolog\Level;
 use Monolog\LogRecord;
+use PDO;
+use PDOStatement;
+use Throwable;
 
 class LogShipperHandler extends AbstractProcessingHandler
 {
@@ -69,7 +77,7 @@ class LogShipperHandler extends AbstractProcessingHandler
                 $buffer->push($sanitizedPayload);
 
                 return;
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 // If buffer fails, fall back to direct shipping
             }
         }
@@ -85,21 +93,21 @@ class LogShipperHandler extends AbstractProcessingHandler
             ShipLogJob::dispatch($sanitizedPayload)
                 ->onConnection($connection)
                 ->onQueue($queue);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             // If dispatching fails, try the fallback channel
             $fallbackChannel = config('log-shipper.fallback_channel');
 
             // CRITICAL: Prevent infinite loop if fallback channel is log_shipper
             if ($fallbackChannel && $fallbackChannel !== 'log_shipper') {
                 try {
-                    \Illuminate\Support\Facades\Log::channel($fallbackChannel)->error(
+                    Log::channel($fallbackChannel)->error(
                         'LogShipper failed to dispatch job',
                         [
                             'exception' => $e->getMessage(),
                             'original_payload' => $sanitizedPayload,
                         ]
                     );
-                } catch (\Throwable $fallbackError) {
+                } catch (Throwable $fallbackError) {
                     // If fallback fails, we really can't do anything else.
                 }
             }
@@ -119,7 +127,7 @@ class LogShipperHandler extends AbstractProcessingHandler
         }
 
         // Check if the exception context comes from the job
-        if (isset($record->context['exception']) && $record->context['exception'] instanceof \Throwable) {
+        if (isset($record->context['exception']) && $record->context['exception'] instanceof Throwable) {
             $exception = $record->context['exception'];
 
             // Check trace string
@@ -215,7 +223,7 @@ class LogShipperHandler extends AbstractProcessingHandler
             $id = Auth::id();
 
             return $id !== null ? (string) $id : null;
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return null;
         }
     }
@@ -231,7 +239,7 @@ class LogShipperHandler extends AbstractProcessingHandler
                 'referrer' => Request::header('referer'),
                 default => null,
             };
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return null;
         }
     }
@@ -249,7 +257,7 @@ class LogShipperHandler extends AbstractProcessingHandler
                 'action' => $route->getActionName(),
                 default => null,
             };
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return null;
         }
     }
@@ -303,21 +311,21 @@ class LogShipperHandler extends AbstractProcessingHandler
 
         foreach ($data as $key => $value) {
             // Skip closures and resources
-            if ($value instanceof \Closure || is_resource($value)) {
+            if ($value instanceof Closure || is_resource($value)) {
                 $filtered[$key] = '[FILTERED: ' . gettype($value) . ']';
 
                 continue;
             }
 
             // SECURITY: Skip PDO and database connection objects to prevent credential leaks
-            if ($value instanceof \PDO || $value instanceof \PDOStatement) {
+            if ($value instanceof PDO || $value instanceof PDOStatement) {
                 $filtered[$key] = '[FILTERED: Database Connection]';
 
                 continue;
             }
 
             // Skip Throwable objects to avoid serialization issues with stack traces
-            if ($value instanceof \Throwable) {
+            if ($value instanceof Throwable) {
                 $filtered[$key] = [
                     'class' => $value::class,
                     'message' => $value->getMessage(),
@@ -333,7 +341,7 @@ class LogShipperHandler extends AbstractProcessingHandler
             if (is_object($value)) {
                 if (method_exists($value, '__toString')) {
                     $filtered[$key] = (string) $value;
-                } elseif ($value instanceof \JsonSerializable) {
+                } elseif ($value instanceof JsonSerializable) {
                     $filtered[$key] = $value->jsonSerialize();
                 } else {
                     $filtered[$key] = '[OBJECT: ' . get_class($value) . ']';

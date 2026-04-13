@@ -1,7 +1,18 @@
 <?php
 
+declare(strict_types=1);
+
 namespace AdminIntelligence\LogShipper;
 
+use AdminIntelligence\LogShipper\Buffer\CacheBuffer;
+use AdminIntelligence\LogShipper\Buffer\LogBufferInterface;
+use AdminIntelligence\LogShipper\Buffer\RedisBuffer;
+use AdminIntelligence\LogShipper\Console\Commands\ShipBatchLogsCommand;
+use AdminIntelligence\LogShipper\Console\Commands\ShipStatusCommand;
+use AdminIntelligence\LogShipper\Console\Commands\TestStatusCommand;
+use Illuminate\Console\Command;
+use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 
 class LogShipperServiceProvider extends ServiceProvider
@@ -13,16 +24,16 @@ class LogShipperServiceProvider extends ServiceProvider
             'log-shipper'
         );
 
-        $this->app->bind(\AdminIntelligence\LogShipper\Buffer\LogBufferInterface::class, function ($app) {
+        $this->app->bind(LogBufferInterface::class, function ($app) {
             $driver = config('log-shipper.batch.driver', 'redis');
             $connection = config('log-shipper.batch.connection', 'default');
             $key = config('log-shipper.batch.buffer_key', 'log_shipper_buffer');
 
             if ($driver === 'cache') {
-                return new \AdminIntelligence\LogShipper\Buffer\CacheBuffer($connection, $key);
+                return new CacheBuffer($connection, $key);
             }
 
-            return new \AdminIntelligence\LogShipper\Buffer\RedisBuffer($connection, $key);
+            return new RedisBuffer($connection, $key);
         });
     }
 
@@ -34,9 +45,9 @@ class LogShipperServiceProvider extends ServiceProvider
             ], 'log-shipper-config');
 
             $this->commands([
-                \AdminIntelligence\LogShipper\Console\Commands\ShipStatusCommand::class,
-                \AdminIntelligence\LogShipper\Console\Commands\TestStatusCommand::class,
-                \AdminIntelligence\LogShipper\Console\Commands\ShipBatchLogsCommand::class,
+                ShipBatchLogsCommand::class,
+                ShipStatusCommand::class,
+                TestStatusCommand::class,
             ]);
 
             $this->warnIfMisconfigured();
@@ -51,7 +62,7 @@ class LogShipperServiceProvider extends ServiceProvider
             return;
         }
 
-        $schedule = $this->app->make(\Illuminate\Console\Scheduling\Schedule::class);
+        $schedule = $this->app->make(Schedule::class);
         $interval = (int) config('log-shipper.batch.interval', 1);
 
         // Ensure interval is at least 1 minute and max 59 (cron limitation)
@@ -71,7 +82,7 @@ class LogShipperServiceProvider extends ServiceProvider
             return;
         }
 
-        $schedule = $this->app->make(\Illuminate\Console\Scheduling\Schedule::class);
+        $schedule = $this->app->make(Schedule::class);
         $minutes = (int) config('log-shipper.status.interval', 5);
 
         // Ensure interval is at least 1 minute
@@ -112,8 +123,8 @@ class LogShipperServiceProvider extends ServiceProvider
 
             $this->app->booted(function () use ($missing) {
                 $this->commands([]);
-                if (class_exists(\Illuminate\Console\Command::class)) {
-                    \Illuminate\Support\Facades\Log::channel('stderr')->warning(
+                if (class_exists(Command::class)) {
+                    Log::channel('stderr')->warning(
                         '[Log Shipper] Missing configuration: ' . implode(', ', $missing) . '. Log shipping is disabled until configured.'
                     );
                 }

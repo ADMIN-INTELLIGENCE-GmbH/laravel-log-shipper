@@ -1,9 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace AdminIntelligence\LogShipper\Tests\Unit;
 
 use AdminIntelligence\LogShipper\Jobs\ShipLogJob;
 use AdminIntelligence\LogShipper\Tests\TestCase;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use PHPUnit\Framework\Attributes\Test;
 
@@ -21,7 +24,7 @@ class ShipLogJobResponseTest extends TestCase
 
         $job = new ShipLogJob(['message' => 'test']);
 
-        $this->expectException(\Illuminate\Http\Client\RequestException::class);
+        $this->expectException(RequestException::class);
 
         $job->handle();
     }
@@ -38,7 +41,7 @@ class ShipLogJobResponseTest extends TestCase
 
         $job = new ShipLogJob(['message' => 'test']);
 
-        $this->expectException(\Illuminate\Http\Client\RequestException::class);
+        $this->expectException(RequestException::class);
 
         $job->handle();
     }

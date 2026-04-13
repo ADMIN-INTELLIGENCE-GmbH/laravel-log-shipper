@@ -1,13 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace AdminIntelligence\LogShipper\Tests\Feature;
 
 use AdminIntelligence\LogShipper\Jobs\ShipLogJob;
+use AdminIntelligence\LogShipper\Logging\CreateCustomLogger;
 use AdminIntelligence\LogShipper\Tests\TestCase;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
+use ReflectionClass;
 
 class IpObfuscationIntegrationTest extends TestCase
 {
@@ -18,7 +22,7 @@ class IpObfuscationIntegrationTest extends TestCase
         // Configure the log shipper channel
         $app['config']->set('logging.channels.log_shipper', [
             'driver' => 'custom',
-            'via' => \AdminIntelligence\LogShipper\Logging\CreateCustomLogger::class,
+            'via' => CreateCustomLogger::class,
             'level' => 'error',
         ]);
 
@@ -101,7 +105,7 @@ class IpObfuscationIntegrationTest extends TestCase
      */
     protected function getJobPayload(ShipLogJob $job): array
     {
-        $reflection = new \ReflectionClass($job);
+        $reflection = new ReflectionClass($job);
         $property = $reflection->getProperty('payload');
         $property->setAccessible(true);
 

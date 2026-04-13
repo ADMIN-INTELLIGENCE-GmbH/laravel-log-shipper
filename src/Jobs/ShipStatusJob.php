@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace AdminIntelligence\LogShipper\Jobs;
 
+use Composer\InstalledVersions;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -11,6 +14,9 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use Throwable;
 
 class ShipStatusJob implements ShouldQueue
 {
@@ -153,7 +159,7 @@ class ShipStatusJob implements ShouldQueue
                     }
                 }
             }
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // Fail silently
         }
 
@@ -186,7 +192,7 @@ class ShipStatusJob implements ShouldQueue
                     return (float) $matches[0];
                 }
             }
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // Fail silently
         }
 
@@ -219,7 +225,7 @@ class ShipStatusJob implements ShouldQueue
                     return time() - strtotime($matches[1]);
                 }
             }
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // Fail silently
         }
 
@@ -244,7 +250,7 @@ class ShipStatusJob implements ShouldQueue
                 'used' => $used,
                 'percent_used' => $total > 0 ? round(($used / $total) * 100, 2) : 0,
             ];
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // Leave as nulls
         }
 
@@ -308,7 +314,7 @@ class ShipStatusJob implements ShouldQueue
                     }
                 }
             }
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // Fail silently
         }
 
@@ -319,7 +325,7 @@ class ShipStatusJob implements ShouldQueue
     {
         try {
             return $this->runCommandWithTimeout('node --version 2>/dev/null', 5);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return null;
         }
     }
@@ -328,7 +334,7 @@ class ShipStatusJob implements ShouldQueue
     {
         try {
             return $this->runCommandWithTimeout('npm --version 2>/dev/null', 5);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return null;
         }
     }
@@ -356,7 +362,7 @@ class ShipStatusJob implements ShouldQueue
             }
 
             return isset($data['installed']) && is_array($data['installed']) ? count($data['installed']) : 0;
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return 0;
         }
     }
@@ -380,7 +386,7 @@ class ShipStatusJob implements ShouldQueue
             $data = json_decode($output, true);
 
             return is_array($data) ? count($data) : 0;
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return 0;
         }
     }
@@ -408,7 +414,7 @@ class ShipStatusJob implements ShouldQueue
             }
 
             return 0;
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return 0;
         }
     }
@@ -442,7 +448,7 @@ class ShipStatusJob implements ShouldQueue
             }
 
             return 0;
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return 0;
         }
     }
@@ -514,7 +520,7 @@ class ShipStatusJob implements ShouldQueue
                 'connection' => $connection,
                 'queue' => $queue,
             ];
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return ['error' => 'Could not fetch queue metrics'];
         }
     }
@@ -530,7 +536,7 @@ class ShipStatusJob implements ShouldQueue
                 'status' => 'connected',
                 'latency_ms' => round(($end - $start) * 1000, 2),
             ];
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return [
                 'status' => 'failed',
                 'error' => $e->getMessage(),
@@ -581,9 +587,9 @@ class ShipStatusJob implements ShouldQueue
         $totalSize = 0;
 
         try {
-            $iterator = new \RecursiveIteratorIterator(
-                new \RecursiveDirectoryIterator($path, \RecursiveDirectoryIterator::SKIP_DOTS),
-                \RecursiveIteratorIterator::LEAVES_ONLY
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($path, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::LEAVES_ONLY
             );
 
             foreach ($iterator as $file) {
@@ -591,7 +597,7 @@ class ShipStatusJob implements ShouldQueue
                     $totalSize += $file->getSize();
                 }
             }
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // If we can't read the folder, return 0
             return 0;
         }
@@ -621,7 +627,7 @@ class ShipStatusJob implements ShouldQueue
                     'X-Project-Key' => $apiKey,
                 ])
                 ->post($endpoint, $payload);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // Fail silently for status updates
         }
     }
@@ -632,12 +638,12 @@ class ShipStatusJob implements ShouldQueue
     protected function getPackageVersion(): string
     {
         try {
-            if (class_exists(\Composer\InstalledVersions::class)) {
-                $version = \Composer\InstalledVersions::getVersion('adminintelligence/laravel-log-shipper');
+            if (class_exists(InstalledVersions::class)) {
+                $version = InstalledVersions::getVersion('adminintelligence/laravel-log-shipper');
 
                 return $version ?? 'unknown';
             }
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // Fall through to unknown
         }
 
