@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Disk Space Payload Structure**: `system.disk_space` now returns an object with both the primary-disk fields (`total`, `free`, `used`, `percent_used`) and a `disks` array, each entry containing `path`, `total`, `free`, `used`, and `percent_used`.
 
+## [1.2.0] - 2025-12-18
+
 ### Added
 - **IP Address Obfuscation**: Added privacy-compliant IP obfuscation with two methods: `mask` (zeros last octet/64 bits) and `hash` (one-way hash). Configurable via `ip_obfuscation.enabled` and `ip_obfuscation.method`.
 - **HTTPS Enforcement**: Production environments now automatically reject HTTP endpoints and require HTTPS to prevent credential leaks.
@@ -79,7 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Request context collection (user ID, IP, user agent, route, etc.)
 - Laravel 10, 11, and 12 support
 
-[Unreleased]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.4.0
 [1.3.0]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.3.0
 [1.2.0]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.2.0
 [1.1.0]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.1.0
