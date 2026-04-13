@@ -32,6 +32,8 @@ This package is designed to work with [**Logger**](https://github.com/ADMIN-INTE
 composer require adminintelligence/laravel-log-shipper
 ```
 
+If you installed `1.4.0`, upgrade to `1.4.1`. This is a corrective follow-up release and does not require configuration changes.
+
 ## Configuration
 
 Publish the configuration file:
@@ -59,6 +61,8 @@ php artisan vendor:publish --tag=log-shipper-config --force
 ```
 
 > **⚠️ Warning:** This will overwrite your existing `config/log-shipper.php` file. Make sure to back up any custom configurations first, or manually merge the new options from the [published config](https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/blob/main/config/log-shipper.php).
+
+> **Note:** Upgrading from `1.4.0` to `1.4.1` does not require republishing the configuration. `1.4.1` is a corrective release for packaging, lint compatibility, and release quality.
 
 **New configuration options in recent versions:**
 - `ip_obfuscation` - Privacy-compliant IP address obfuscation
@@ -233,7 +237,7 @@ Here is an example of the JSON payload sent for a status update:
     "app_env": "local",
     "app_debug": true,
     "instance_id": "Boxxy",
-    "log_shipper_version": "1.3.0",
+    "log_shipper_version": "1.4.1",
     "system": {
         "memory_usage": 33554432,
         "memory_peak": 33554432,
