@@ -199,6 +199,41 @@ return [
             'dependency_checks' => true,
             // Optional: Security audit checks (can be slow, ~10-30s)
             'security_audits' => true,
+            // Operating system identity: distribution, version, kernel, architecture.
+            // Cheap - a single file read on Linux, no shell commands.
+            'os' => true,
+            // Host runtime details: hostname, app URL, timezone, locale,
+            // web server, PHP SAPI and loaded extensions. Pure PHP.
+            'host' => true,
+            // Pending OS package updates via apt/dnf/yum/apk/pacman/brew.
+            // Shells out, so it stays opt-in.
+            'system_updates' => false,
+        ],
+
+        /*
+        |----------------------------------------------------------------------
+        | Pending Update Scanning
+        |----------------------------------------------------------------------
+        |
+        | Applies when the 'system_updates' metric is enabled. The scan is
+        | strictly read-only: it reads whatever package metadata the host
+        | already has. It never refreshes metadata, never touches the network
+        | and never needs root, so counts are only as fresh as the host's last
+        | `apt-get update` (reported back as 'last_refresh').
+        |
+        */
+        'updates' => [
+            // Send the names/versions of upgradable packages, not just counts.
+            // Disable if you would rather not tell the log server which
+            // software this host has installed.
+            'include_packages' => true,
+
+            // Cap on how many packages are listed. The full count is still
+            // reported in 'total_count' and 'truncated' flags the cut.
+            'max_packages' => 50,
+
+            // Seconds any single package manager command may take.
+            'timeout' => 15,
         ],
 
         'monitored_disk_path' => env('LOG_SHIPPER_DISK_PATH', '/'),

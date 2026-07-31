@@ -32,7 +32,7 @@ This package is designed to work with [**Logger**](https://github.com/ADMIN-INTE
 composer require adminintelligence/laravel-log-shipper
 ```
 
-If you installed `1.4.0`, upgrade to `1.4.1`. This is a corrective follow-up release and does not require configuration changes.
+Upgrading from `1.4.x` to `1.5.0` adds the optional `os`, `host` and `updates` status blocks. See [Upgrading Configuration](#upgrading-configuration) — existing published config files need the new keys added before those metrics are collected.
 
 ## Configuration
 
@@ -62,7 +62,7 @@ php artisan vendor:publish --tag=log-shipper-config --force
 
 > **⚠️ Warning:** This will overwrite your existing `config/log-shipper.php` file. Make sure to back up any custom configurations first, or manually merge the new options from the [published config](https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/blob/main/config/log-shipper.php).
 
-> **Note:** Upgrading from `1.4.0` to `1.4.1` does not require republishing the configuration. `1.4.1` is a corrective release for packaging, lint compatibility, and release quality.
+> **Note for `1.5.0`:** the new `os`, `host` and `system_updates` metrics only apply if their config keys are present. Laravel merges package config at the top level only, so a published `config/log-shipper.php` replaces the entire `status` array and never receives the new keys — the metrics stay off until you add them or republish with `--force`. Installs that never published the config get `os` and `host` on by default; `system_updates` stays opt-in everywhere.
 
 **New configuration options in recent versions:**
 - `ip_obfuscation` - Privacy-compliant IP address obfuscation
@@ -72,6 +72,10 @@ php artisan vendor:publish --tag=log-shipper-config --force
 - `status.metrics.dependency_checks` - Outdated package detection
 - `status.metrics.security_audits` - Security vulnerability scanning
 - `status.monitored_folders` - Folders to monitor for size metrics
+- `status.metrics.os` - Operating system identity (distribution, version, kernel, architecture)
+- `status.metrics.host` - Host runtime details (hostname, timezone, PHP SAPI, extensions)
+- `status.metrics.system_updates` - Pending OS package updates and pending-reboot state
+- `status.updates` - Package list size and timeout for the update scan
 
 ## Usage
 
@@ -293,6 +297,41 @@ Here is an example of the JSON payload sent for a status update:
         "upload": -1,
         "cache": 523732,
         "email-assets": -1
+    },
+    "os": {
+        "family": "Linux",
+        "name": "Ubuntu 24.04.1 LTS",
+        "version": "24.04",
+        "distro_id": "ubuntu",
+        "kernel": "6.8.0-51-generic",
+        "architecture": "x86_64"
+    },
+    "host": {
+        "hostname": "web-01",
+        "app_url": "https://app.example.com",
+        "timezone": "UTC",
+        "locale": "en",
+        "server_software": "nginx/1.24.0",
+        "php_sapi": "fpm-fcgi",
+        "php_extensions": ["curl", "json", "mbstring", "pdo_mysql", "redis"]
+    },
+    "updates": {
+        "manager": "apt",
+        "supported": true,
+        "total_count": 12,
+        "security_count": 3,
+        "packages": [
+            {
+                "name": "openssl",
+                "current_version": "3.0.13-0ubuntu3.4",
+                "available_version": "3.0.13-0ubuntu3.5",
+                "security": true
+            }
+        ],
+        "truncated": false,
+        "reboot_required": true,
+        "last_refresh": "2026-07-28T04:12:03+00:00",
+        "error": null
     }
 }
 ```
@@ -357,6 +396,55 @@ Each entry in `disks` contains:
 | `used` | float | Used space on the filesystem (bytes) |
 | `percent_used` | float | Percentage of the filesystem in use |
 
+#### OS Object
+
+Sent when `status.metrics.os` is enabled. On Linux this is a single read of `/etc/os-release` — no shell commands.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `family` | string | `Linux`, `Darwin`, `Windows` or `BSD` |
+| `name` | string\|null | Distribution name (`PRETTY_NAME`, falling back to `NAME` + `VERSION`); `sw_vers -productName` on macOS |
+| `version` | string\|null | `VERSION_ID` (falling back to `VERSION`); `sw_vers -productVersion` on macOS |
+| `distro_id` | string\|null | Machine-readable distribution id (`ubuntu`, `debian`, `almalinux`, `macos`, `windows`) |
+| `kernel` | string\|null | Kernel release (`php_uname('r')`) |
+| `architecture` | string\|null | CPU architecture (`x86_64`, `arm64`, …) |
+
+Unknown fields are `null` rather than missing, so the key set is identical on every platform.
+
+#### Host Object
+
+Sent when `status.metrics.host` is enabled. Pure PHP — no shell commands and no DNS lookups.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `hostname` | string\|null | `gethostname()` |
+| `app_url` | string\|null | `config('app.url')` |
+| `timezone` | string\|null | `config('app.timezone')`, falling back to the runtime default |
+| `locale` | string\|null | Active application locale |
+| `server_software` | string\|null | `$_SERVER['SERVER_SOFTWARE']`; `null` when the status job runs from CLI or a queue worker |
+| `php_sapi` | string | `PHP_SAPI` (`fpm-fcgi`, `cli`, …) |
+| `php_extensions` | array | Loaded extension names, sorted |
+
+#### Updates Object
+
+Sent when `status.metrics.system_updates` is enabled. Supports apt, dnf, yum, apk, pacman and Homebrew; the first package manager found on `PATH` wins, in that order.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `manager` | string\|null | Detected package manager, or `null` when none is available |
+| `supported` | bool | Whether a supported package manager was found on this host. `true` does not mean the scan succeeded — a detected manager that fails still reports `true` with a null `total_count` and a populated `error` |
+| `total_count` | int\|null | Pending updates; `null` when the check failed |
+| `security_count` | int\|null | Pending security updates; `null` where the package manager cannot distinguish them (apk, pacman, brew) |
+| `packages` | array | Upgradable packages — `name`, `current_version`, `available_version`, `security` |
+| `truncated` | bool | `true` when `packages` was cut at `updates.max_packages` |
+| `reboot_required` | bool\|null | `/var/run/reboot-required` on Debian/Ubuntu, `needs-restarting -r` on RHEL; `null` when unknowable |
+| `last_refresh` | string\|null | When the host last refreshed its package metadata |
+| `error` | string\|null | Why the check failed, when it did |
+
+> **⚠️ Read-only by design:** the scan reads whatever package metadata the host already has. It never runs `apt-get update`, never touches the network and never needs root — so counts are only as fresh as the host's last metadata refresh. That is what `last_refresh` is for: if it is old (or `null`), treat the counts as stale. Keep refreshing metadata to the host's own cron/unattended-upgrades setup.
+
+> **Note:** `packages` tells your log server which software versions this host runs. Set `updates.include_packages` to `false` to send counts only.
+
 #### Queue Object
 - **Size**: Queue jobs count (excluding the status job itself)
 - **Connection**: Active queue connection
@@ -390,6 +478,18 @@ To configure which metrics are sent or to monitor specific files/folders, publis
         'node_npm' => false,              // Node.js and npm versions
         'dependency_checks' => false,     // Outdated package counts
         'security_audits' => false,       // Security vulnerability counts
+
+        // Host and OS reporting
+        'os' => true,                     // Distribution, version, kernel, architecture
+        'host' => true,                   // Hostname, timezone, PHP SAPI, extensions
+        'system_updates' => false,        // Pending OS package updates
+    ],
+
+    // Applies when 'system_updates' is enabled
+    'updates' => [
+        'include_packages' => true,       // Send package names, not just counts
+        'max_packages' => 50,             // Cap on the listed packages
+        'timeout' => 15,                  // Seconds per package manager command
     ],
 
     'monitored_files' => [
@@ -404,7 +504,7 @@ To configure which metrics are sent or to monitor specific files/folders, publis
 ],
 ```
 
-> **Performance Note:** The optional metrics (`node_npm`, `dependency_checks`, `security_audits`) can be slow as they execute shell commands. Enable these only if you need them and have increased the job timeout accordingly (default: 120 seconds).
+> **Performance Note:** The optional metrics (`node_npm`, `dependency_checks`, `security_audits`, `system_updates`) can be slow as they execute shell commands. Enable these only if you need them and have increased the job timeout accordingly (default: 120 seconds). `os` and `host` are cheap — a file read and pure PHP respectively.
 
 > **Note:** Status pushing relies on Laravel's scheduler. Ensure you have the scheduler running:
 > `* * * * * cd /path-to-your-project && php artisan schedule:run >> /dev/null 2>&1`

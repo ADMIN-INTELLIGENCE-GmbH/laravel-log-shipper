@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace AdminIntelligence\LogShipper\Jobs;
 
+use AdminIntelligence\LogShipper\Status\CommandRunner;
+use AdminIntelligence\LogShipper\Status\HostInfoCollector;
+use AdminIntelligence\LogShipper\Status\OsInfoCollector;
+use AdminIntelligence\LogShipper\Status\SystemUpdatesCollector;
 use Composer\InstalledVersions;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -25,6 +29,8 @@ class ShipStatusJob implements ShouldQueue
     public int $tries = 1;
 
     public int $timeout = 120; // Increased to handle composer/npm commands
+
+    protected ?CommandRunner $runner = null;
 
     public function handle(): void
     {
@@ -71,6 +77,18 @@ class ShipStatusJob implements ShouldQueue
 
         if ($enabledMetrics['foldersize'] ?? true) {
             $metrics['foldersize'] = $this->getFoldersizeMetrics();
+        }
+
+        if ($enabledMetrics['os'] ?? false) {
+            $metrics['os'] = $this->osInfoCollector()->collect();
+        }
+
+        if ($enabledMetrics['host'] ?? false) {
+            $metrics['host'] = $this->hostInfoCollector()->collect();
+        }
+
+        if ($enabledMetrics['system_updates'] ?? false) {
+            $metrics['updates'] = $this->systemUpdatesCollector()->collect();
         }
 
         return $metrics;
@@ -458,55 +476,27 @@ class ShipStatusJob implements ShouldQueue
      */
     protected function runCommandWithTimeout(string $command, int $timeoutSeconds): ?string
     {
-        $descriptors = [
-            0 => ['pipe', 'r'],
-            1 => ['pipe', 'w'],
-            2 => ['pipe', 'w'],
-        ];
+        return $this->commandRunner()->run($command, $timeoutSeconds);
+    }
 
-        $process = proc_open($command, $descriptors, $pipes);
+    protected function commandRunner(): CommandRunner
+    {
+        return $this->runner ??= new CommandRunner;
+    }
 
-        if (!is_resource($process)) {
-            return null;
-        }
+    protected function osInfoCollector(): OsInfoCollector
+    {
+        return new OsInfoCollector($this->commandRunner());
+    }
 
-        stream_set_blocking($pipes[1], false);
-        stream_set_blocking($pipes[2], false);
+    protected function hostInfoCollector(): HostInfoCollector
+    {
+        return new HostInfoCollector;
+    }
 
-        $start = microtime(true);
-        $output = '';
-
-        while (true) {
-            $elapsed = microtime(true) - $start;
-
-            if ($elapsed > $timeoutSeconds) {
-                proc_terminate($process);
-                fclose($pipes[0]);
-                fclose($pipes[1]);
-                fclose($pipes[2]);
-                proc_close($process);
-
-                return null;
-            }
-
-            $read = stream_get_contents($pipes[1]);
-            if ($read !== false && $read !== '') {
-                $output .= $read;
-            }
-
-            $status = proc_get_status($process);
-            if (!$status['running']) {
-                $output .= stream_get_contents($pipes[1]);
-                fclose($pipes[0]);
-                fclose($pipes[1]);
-                fclose($pipes[2]);
-                proc_close($process);
-
-                return trim($output) ?: null;
-            }
-
-            usleep(100000); // 100ms
-        }
+    protected function systemUpdatesCollector(): SystemUpdatesCollector
+    {
+        return new SystemUpdatesCollector($this->commandRunner());
     }
 
     protected function getQueueMetrics(): array

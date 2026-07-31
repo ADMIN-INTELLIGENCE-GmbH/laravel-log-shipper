@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-07-31
+
+### Added
+- **OS Reporting**: Status payloads can include an `os` block with the distribution name, version, machine-readable distribution id, kernel release and CPU architecture. Read from `/etc/os-release` on Linux, `sw_vers` on macOS, `php_uname()` elsewhere. Enabled via `status.metrics.os`.
+- **Host Runtime Reporting**: New `host` block with hostname, app URL, timezone, locale, web server software, PHP SAPI and loaded extensions. Pure PHP — no shell commands, no DNS lookups. Enabled via `status.metrics.host`.
+- **Pending OS Updates**: New `updates` block reporting pending package updates, pending security updates, upgradable package details, pending-reboot state and when the host last refreshed its package metadata. Supports apt, dnf, yum, apk, pacman and Homebrew. Opt-in via `status.metrics.system_updates`.
+- **Update Scan Configuration**: New `status.updates` section with `include_packages` (send counts only if you would rather not report installed software), `max_packages` (list cap, reported through the `truncated` flag) and `timeout`.
+
+### Changed
+- **Shell Execution Extracted**: `ShipStatusJob::runCommandWithTimeout()` now delegates to the new `AdminIntelligence\LogShipper\Status\CommandRunner`, which also drains stderr (preventing a chatty command from deadlocking on a full pipe buffer) and can report exit codes. Behaviour of existing metrics is unchanged.
+
+### Upgrade Notes
+- **Published configs do not pick up the new metrics automatically.** Laravel's `mergeConfigFrom()` merges only at the top level, so an application that has published `config/log-shipper.php` replaces the whole `status` array and the new keys never reach it. Those installs keep the old payload until `status.metrics.os`, `status.metrics.host`, `status.metrics.system_updates` and the `status.updates` block are added by hand, or the config is republished with `--force`. Installs that never published the config get `os` and `host` enabled by default.
+- **Receiving log servers see new top-level keys.** With the shipped defaults, status payloads gain `os` and `host` blocks (and `updates` where enabled). Confirm the ingest side tolerates unknown keys before rolling this out.
+
+### Security
+- Update scanning is strictly read-only: it never refreshes package metadata, never accesses the network and never requires root. All commands are fixed literals — no configuration or user input is interpolated into a command string — and binary detection rejects anything that is not a plain binary name.
+
 ## [1.4.1] - 2026-04-13
 
 ### Fixed
@@ -88,7 +106,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Request context collection (user ID, IP, user agent, route, etc.)
 - Laravel 10, 11, and 12 support
 
-[Unreleased]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.5.0
 [1.4.1]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.4.1
 [1.4.0]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.4.0
 [1.3.0]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.3.0
