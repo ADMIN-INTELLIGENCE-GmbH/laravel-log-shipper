@@ -282,9 +282,15 @@ class LogShipperHandler extends AbstractProcessingHandler
         return $data;
     }
 
-    protected function isSensitiveKey(string $key, array $sensitiveFields): bool
+    /**
+     * Check if a key is sensitive.
+     *
+     * Accepts int keys: lists in the log context (e.g. ['ids' => [1, 2, 3]]) are
+     * traversed with their integer keys, which can never be a sensitive field name.
+     */
+    protected function isSensitiveKey(string|int $key, array $sensitiveFields): bool
     {
-        $lowerKey = strtolower($key);
+        $lowerKey = strtolower((string) $key);
 
         foreach ($sensitiveFields as $field) {
             $lowerField = strtolower($field);

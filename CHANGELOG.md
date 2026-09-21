@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-09-21
+
+### Fixed
+- **Lists in the log context no longer kill the log line**: `LogShipperHandler::sanitizeRecursive()` walked every array with `foreach ($data as $key => $value)` and handed the key to `isSensitiveKey(string $key, ...)`. A list — any array with integer keys, e.g. `Log::info('Summary', ['new_users' => ['alice', 'bob']])` — therefore raised `TypeError: isSensitiveKey(): Argument #1 ($key) must be of type string, int given` under `declare(strict_types=1)`, and the log entry was lost. `isSensitiveKey()` now accepts `string|int` in both `LogShipperHandler` and `ShipLogJob`. Integer keys are cast and never match a sensitive field name, so list values are shipped unchanged and recursion into nested lists of arrays still redacts sensitive keys inside them. Affects every release since sanitization was introduced; empty lists were unaffected, which is why it only surfaced on payloads that actually contained data.
+
 ## [1.5.0] - 2026-07-31
 
 ### Added
@@ -106,7 +111,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Request context collection (user ID, IP, user agent, route, etc.)
 - Laravel 10, 11, and 12 support
 
-[Unreleased]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.5.1
 [1.5.0]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.5.0
 [1.4.1]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.4.1
 [1.4.0]: https://github.com/ADMIN-INTELLIGENCE-GmbH/laravel-log-shipper/releases/tag/v1.4.0

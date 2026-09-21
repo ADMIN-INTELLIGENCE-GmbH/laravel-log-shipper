@@ -98,9 +98,9 @@ class ShipLogJob implements ShouldQueue
     /**
      * Check if a key is sensitive.
      */
-    protected function isSensitiveKey(string $key, array $sensitiveFields): bool
+    protected function isSensitiveKey(string|int $key, array $sensitiveFields): bool
     {
-        $lowerKey = strtolower($key);
+        $lowerKey = strtolower((string) $key);
 
         foreach ($sensitiveFields as $field) {
             if (str_contains($lowerKey, strtolower($field))) {

@@ -525,6 +525,8 @@ The package automatically redacts sensitive fields from your logs. The following
 | `token` | token, access_token, refresh_token |
 | `authorization` | authorization |
 
+Only array **keys** are matched, and only string keys: lists (arrays with integer keys) are traversed but their values are shipped unchanged. `['fields' => ['password', 'token']]` ships as-is — `password` is a value there, not a key. Nested arrays inside a list are still sanitized, so `['changes' => [['user' => 'alice', 'password' => 'x']]]` redacts the password.
+
 Add additional fields to sanitize in the config file:
 
 ```php
