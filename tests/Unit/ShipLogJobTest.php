@@ -124,6 +124,30 @@ class ShipLogJobTest extends TestCase
     }
 
     #[Test]
+    public function it_exits_quietly_when_endpoint_is_null(): void
+    {
+        Http::fake();
+
+        config(['log-shipper.api_endpoint' => null]);
+        config(['log-shipper.api_key' => 'test-key']);
+
+        (new ShipLogJob(['level' => 'error', 'message' => 'Test']))->handle();
+
+        Http::assertNothingSent();
+    }
+
+    #[Test]
+    public function failed_restores_a_disabled_shipper(): void
+    {
+        config(['log-shipper.enabled' => false]);
+        config(['log-shipper.fallback_channel' => 'null']);
+
+        (new ShipLogJob(['level' => 'error', 'message' => 'Test']))->failed(new \Exception('boom'));
+
+        $this->assertFalse(config('log-shipper.enabled'));
+    }
+
+    #[Test]
     public function it_has_configurable_tries(): void
     {
         config(['log-shipper.retries' => 5]);

@@ -9,6 +9,26 @@ use PHPUnit\Framework\Attributes\Test;
 
 class RedisBufferTest extends TestCase
 {
+    /**
+     * Mock a transaction whose callback receives a pipe expecting rpush + ltrim.
+     */
+    private function expectCappedPush(string $key, int $max, ?\Closure $payloadCheck = null): void
+    {
+        $pipe = \Mockery::mock();
+        $pipe->shouldReceive('rpush')
+            ->once()
+            ->with($key, $payloadCheck ? \Mockery::on($payloadCheck) : \Mockery::type('string'))
+            ->ordered();
+        $pipe->shouldReceive('ltrim')
+            ->once()
+            ->with($key, -$max, -1)
+            ->ordered();
+
+        Redis::shouldReceive('transaction')
+            ->once()
+            ->andReturnUsing(fn (callable $callback) => $callback($pipe));
+    }
+
     #[Test]
     public function push_adds_item_to_redis_list()
     {
@@ -17,13 +37,47 @@ class RedisBufferTest extends TestCase
             ->once()
             ->andReturnSelf();
 
-        Redis::shouldReceive('rpush')
-            ->once()
-            ->with('log_shipper_buffer', \Mockery::on(function ($json) {
-                $decoded = json_decode($json, true);
+        $this->expectCappedPush('log_shipper_buffer', 10000, function ($json) {
+            $decoded = json_decode($json, true);
 
-                return $decoded['level'] === 'error' && $decoded['message'] === 'Test';
-            }));
+            return $decoded['level'] === 'error' && $decoded['message'] === 'Test';
+        });
+
+        $buffer = new RedisBuffer('default', 'log_shipper_buffer');
+        $buffer->push(['level' => 'error', 'message' => 'Test']);
+    }
+
+    #[Test]
+    public function push_skips_a_payload_that_cannot_be_encoded()
+    {
+        // rpush(false) would store an empty entry that popBatch drops silently
+        Redis::shouldReceive('connection')->andReturnSelf();
+        Redis::shouldReceive('transaction')->never();
+
+        (new RedisBuffer('default', 'log_shipper_buffer'))->push(['value' => NAN]);
+    }
+
+    #[Test]
+    public function push_trims_list_to_configured_max_buffer_size()
+    {
+        config(['log-shipper.batch.max_buffer_size' => '500']);
+
+        Redis::shouldReceive('connection')->andReturnSelf();
+
+        $this->expectCappedPush('log_shipper_buffer', 500);
+
+        $buffer = new RedisBuffer('default', 'log_shipper_buffer');
+        $buffer->push(['level' => 'error', 'message' => 'Test']);
+    }
+
+    #[Test]
+    public function push_falls_back_to_default_cap_below_one()
+    {
+        config(['log-shipper.batch.max_buffer_size' => 0]);
+
+        Redis::shouldReceive('connection')->andReturnSelf();
+
+        $this->expectCappedPush('log_shipper_buffer', 10000);
 
         $buffer = new RedisBuffer('default', 'log_shipper_buffer');
         $buffer->push(['level' => 'error', 'message' => 'Test']);
@@ -168,7 +222,7 @@ class RedisBufferTest extends TestCase
             ->once()
             ->andReturnSelf();
 
-        Redis::shouldReceive('rpush')->once();
+        $this->expectCappedPush('custom_buffer', 10000);
 
         $buffer = new RedisBuffer('custom-redis', 'custom_buffer');
         $buffer->push(['test' => 'data']);
@@ -179,9 +233,7 @@ class RedisBufferTest extends TestCase
     {
         Redis::shouldReceive('connection')->andReturnSelf();
 
-        Redis::shouldReceive('rpush')
-            ->once()
-            ->with('my_custom_key', \Mockery::type('string'));
+        $this->expectCappedPush('my_custom_key', 10000);
 
         $buffer = new RedisBuffer('default', 'my_custom_key');
         $buffer->push(['test' => 'data']);

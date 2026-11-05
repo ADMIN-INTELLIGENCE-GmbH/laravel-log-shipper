@@ -2,6 +2,7 @@
 
 namespace AdminIntelligence\LogShipper\Tests\Unit;
 
+use AdminIntelligence\LogShipper\Buffer\LogBufferInterface;
 use AdminIntelligence\LogShipper\Jobs\ShipLogJob;
 use AdminIntelligence\LogShipper\Logging\LogShipperHandler;
 use AdminIntelligence\LogShipper\Tests\TestCase;
@@ -43,6 +44,28 @@ class LogShipperHandlerTest extends TestCase
         $handler->handle($record);
 
         Queue::assertNotPushed(ShipLogJob::class);
+    }
+
+    #[Test]
+    public function it_does_nothing_without_api_key_or_endpoint(): void
+    {
+        $buffer = \Mockery::mock(LogBufferInterface::class);
+        $buffer->shouldNotReceive('push');
+        $this->app->instance(LogBufferInterface::class, $buffer);
+
+        $handler = new LogShipperHandler(Level::Error);
+
+        foreach ([false, true] as $batch) {
+            config(['log-shipper.batch.enabled' => $batch]);
+
+            config(['log-shipper.api_key' => '', 'log-shipper.api_endpoint' => 'https://logs.example.com/api/ingest']);
+            $handler->handle($this->createLogRecord('no key', Level::Error));
+
+            config(['log-shipper.api_key' => 'test-key', 'log-shipper.api_endpoint' => null]);
+            $handler->handle($this->createLogRecord('no endpoint', Level::Error));
+        }
+
+        Queue::assertNothingPushed();
     }
 
     #[Test]

@@ -14,10 +14,15 @@ class CommandRunner
 {
     /**
      * Run a command and return its trimmed stdout, or null on failure/timeout.
+     *
+     * A timeout only kills the sh wrapper. So pass the working directory as
+     * $cwd instead of prefixing `cd X &&`, and start the command with `exec`
+     * (bash as sh forks instead of execs when redirects are present), or the
+     * binary keeps running as an orphan.
      */
-    public function run(string $command, int $timeoutSeconds): ?string
+    public function run(string $command, int $timeoutSeconds, ?string $cwd = null): ?string
     {
-        $result = $this->runWithExitCode($command, $timeoutSeconds);
+        $result = $this->runWithExitCode($command, $timeoutSeconds, $cwd);
 
         if ($result['timed_out'] || $result['output'] === '') {
             return null;
@@ -35,7 +40,7 @@ class CommandRunner
      *
      * @return array{output: string, exit_code: int|null, timed_out: bool}
      */
-    public function runWithExitCode(string $command, int $timeoutSeconds): array
+    public function runWithExitCode(string $command, int $timeoutSeconds, ?string $cwd = null): array
     {
         $descriptors = [
             0 => ['pipe', 'r'],
@@ -43,7 +48,7 @@ class CommandRunner
             2 => ['pipe', 'w'],
         ];
 
-        $process = @proc_open($command, $descriptors, $pipes);
+        $process = @proc_open($command, $descriptors, $pipes, $cwd);
 
         if (!is_resource($process)) {
             return ['output' => '', 'exit_code' => null, 'timed_out' => false];

@@ -3,6 +3,7 @@
 namespace AdminIntelligence\LogShipper\Jobs;
 
 use AdminIntelligence\LogShipper\Jobs\Concerns\ShipsLogs;
+use AdminIntelligence\LogShipper\Utils\Sanitizer;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -68,6 +69,18 @@ class ShipLogJob implements ShouldQueue
                 ])
                 ->post($endpoint, $this->payload);
 
+            // A rejected request stays rejected: fail at once (failed() still runs), no retry
+            if ($response->clientError() && $response->status() !== 429) {
+                // Bad key or endpoint (401/403/404) hits every log: let the breaker trip. Payload errors (413/422) stay out.
+                if (in_array($response->status(), [401, 403, 404], true)) {
+                    $this->recordFailure($response->toException());
+                }
+
+                $this->fail($response->toException());
+
+                return;
+            }
+
             if (!$response->successful()) {
                 $response->throw();
             }
@@ -77,38 +90,6 @@ class ShipLogJob implements ShouldQueue
             $this->recordFailure($e);
             throw $e;
         }
-    }
-
-    /**
-     * Sanitize sensitive data recursively.
-     */
-    protected function sanitizeRecursive(array $data, array $sensitiveFields): array
-    {
-        foreach ($data as $key => $value) {
-            if (is_array($value)) {
-                $data[$key] = $this->sanitizeRecursive($value, $sensitiveFields);
-            } elseif ($this->isSensitiveKey($key, $sensitiveFields)) {
-                $data[$key] = '[REDACTED]';
-            }
-        }
-
-        return $data;
-    }
-
-    /**
-     * Check if a key is sensitive.
-     */
-    protected function isSensitiveKey(string|int $key, array $sensitiveFields): bool
-    {
-        $lowerKey = strtolower((string) $key);
-
-        foreach ($sensitiveFields as $field) {
-            if (str_contains($lowerKey, strtolower($field))) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**
@@ -122,7 +103,8 @@ class ShipLogJob implements ShouldQueue
             return;
         }
 
-        // Prevent infinite loops: Disable log shipping while writing to fallback
+        // Prevent infinite loops: Disable log shipping while writing to fallback, restore the previous value after
+        $wasEnabled = config('log-shipper.enabled');
         config(['log-shipper.enabled' => false]);
 
         try {
@@ -134,12 +116,7 @@ class ShipLogJob implements ShouldQueue
             $context['log_shipper_failure'] = $exception?->getMessage();
 
             // SECURITY FIX: Sanitize payload before logging to prevent exposure of sensitive data
-            $sanitizedPayload = $this->payload;
-            if (isset($sanitizedPayload['context'])) {
-                $sensitiveFields = config('log-shipper.sanitize_fields', []);
-                $sanitizedPayload['context'] = $this->sanitizeRecursive($sanitizedPayload['context'], $sensitiveFields);
-            }
-            $context['original_payload'] = $sanitizedPayload;
+            $context['original_payload'] = Sanitizer::sanitize($this->payload, config('log-shipper.sanitize_fields', []));
 
             // Ensure we don't trigger the log shipper handler again
             // by explicitly using a channel that doesn't include it, if possible.
@@ -149,8 +126,7 @@ class ShipLogJob implements ShouldQueue
         } catch (\Throwable) {
             // If the fallback fails, we really are doomed.
         } finally {
-            // Restore config just in case, though in a job it might not matter much
-            config(['log-shipper.enabled' => true]);
+            config(['log-shipper.enabled' => $wasEnabled]);
         }
     }
 }

@@ -18,6 +18,13 @@ class FakeCommandRunner extends CommandRunner
     public array $commands = [];
 
     /**
+     * Working directory passed with each command, in the same order.
+     *
+     * @var array<int, string|null>
+     */
+    public array $cwds = [];
+
+    /**
      * @param  array<string, string|array{output?: string, exit_code?: int|null, timed_out?: bool}|null>  $responses  Keyed by a substring of the command.
      * @param  array<int, string>  $binaries  Binary names that should report as installed.
      */
@@ -26,9 +33,9 @@ class FakeCommandRunner extends CommandRunner
         protected array $binaries = []
     ) {}
 
-    public function run(string $command, int $timeoutSeconds): ?string
+    public function run(string $command, int $timeoutSeconds, ?string $cwd = null): ?string
     {
-        $result = $this->runWithExitCode($command, $timeoutSeconds);
+        $result = $this->runWithExitCode($command, $timeoutSeconds, $cwd);
 
         if ($result['timed_out'] || $result['output'] === '') {
             return null;
@@ -37,9 +44,10 @@ class FakeCommandRunner extends CommandRunner
         return $result['output'];
     }
 
-    public function runWithExitCode(string $command, int $timeoutSeconds): array
+    public function runWithExitCode(string $command, int $timeoutSeconds, ?string $cwd = null): array
     {
         $this->commands[] = $command;
+        $this->cwds[] = $cwd;
 
         foreach ($this->responses as $needle => $response) {
             if (!str_contains($command, (string) $needle)) {

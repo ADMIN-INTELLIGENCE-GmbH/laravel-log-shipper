@@ -64,9 +64,12 @@ php artisan vendor:publish --tag=log-shipper-config --force
 
 > **Note for `1.5.0`:** the new `os`, `host` and `system_updates` metrics only apply if their config keys are present. Laravel merges package config at the top level only, so a published `config/log-shipper.php` replaces the entire `status` array and never receives the new keys — the metrics stay off until you add them or republish with `--force`. Installs that never published the config get `os` and `host` on by default; `system_updates` stays opt-in everywhere.
 
+> **Note for the next release:** the code fallbacks now match the shipped config. A published config that lacks a nested key gets the shipped default, so `os`, `host`, `node_npm` and the circuit breaker switch on unless your config sets them to `false`. `dependency_checks` and `security_audits` now default to `false`.
+
 **New configuration options in recent versions:**
 - `ip_obfuscation` - Privacy-compliant IP address obfuscation
 - `max_payload_size` - Payload size limiting for security
+- `batch.max_buffer_size` - Cap on the Redis batch buffer
 - `status.metrics.foldersize` - Folder size monitoring
 - `status.metrics.node_npm` - Node.js and npm version detection
 - `status.metrics.dependency_checks` - Outdated package detection
@@ -133,8 +136,8 @@ When a log event is shipped, the following data is sent:
 |-------|------|-------------|
 | `level` | string | Log level (error, warning, info, debug, etc.) |
 | `message` | string | The log message |
-| `context` | array | Any context array passed to the log call |
-| `datetime` | string | Timestamp in `Y-m-d H:i:s.u` format |
+| `context` | array | Any context array passed to the log call. Exceptions are sent with a stack trace (max 50 frames, no call arguments, up to 3 previous exceptions); their frames are also sent as `context.trace` for the log server |
+| `datetime` | string | Timestamp in UTC, `Y-m-d\TH:i:s.uP` format (ISO 8601 with offset) |
 | `channel` | string | The logging channel name |
 | `extra` | array | Additional Monolog processor data |
 
@@ -147,7 +150,7 @@ These fields can be toggled via the `send_context` configuration:
 | `user_id` | int\|null | enabled | Authenticated user's ID |
 | `ip_address` | string\|null | enabled | Client IP address |
 | `user_agent` | string\|null | enabled | Browser/client user agent string |
-| `request_method` | string\|null | enabled | HTTP method (GET, POST, PUT, DELETE, etc.) |
+| `request_method` | string\|null | enabled | HTTP method (GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS); other methods are sent as null |
 | `request_url` | string\|null | enabled | Full request URL including query string |
 | `route_name` | string\|null | enabled | Laravel route name |
 | `controller_action` | string\|null | enabled | Controller and action handling the request |
@@ -178,7 +181,7 @@ Here is an example of the JSON payload sent for a log event:
         "order_id": 12345,
         "reason": "Payment declined"
     },
-    "datetime": "2025-12-11 14:30:45.123456",
+    "datetime": "2025-12-11T14:30:45.123456+00:00",
     "channel": "local",
     "extra": {},
     "user_id": "1",
@@ -291,7 +294,6 @@ Here is an example of the JSON payload sent for a status update:
         "status": "connected",
         "latency_ms": 8.51
     },
-    "cache": [],
     "filesize": [],
     "foldersize": {
         "upload": -1,
@@ -363,10 +365,10 @@ The status payload includes the following system metrics:
 | `disk_space` | object | Primary disk metrics + `disks` array of all mounted filesystems |
 | `node_version` | string\|null | Node.js version (if enabled) |
 | `npm_version` | string\|null | npm version (if enabled) |
-| `composer_outdated` | int | Count of outdated Composer packages (if enabled) |
-| `npm_outdated` | int | Count of outdated npm packages (if enabled) |
-| `composer_audit` | int | Count of Composer security advisories (if enabled) |
-| `npm_audit` | int | Count of npm security vulnerabilities (if enabled) |
+| `composer_outdated` | int\|null | Count of outdated Composer packages (if enabled), null when the check could not run |
+| `npm_outdated` | int\|null | Count of outdated npm packages (if enabled), null when the check could not run |
+| `composer_audit` | int\|null | Count of Composer security advisories (if enabled), null when the check could not run |
+| `npm_audit` | int\|null | Count of npm security vulnerabilities (if enabled), null when the check could not run |
 
 #### Server Memory Object
 | Field | Type | Description |
@@ -453,9 +455,6 @@ Sent when `status.metrics.system_updates` is enabled. Supports apt, dnf, yum, ap
 - **Status**: Connection status (`connected` or `disconnected`)
 - **Latency**: Query latency in milliseconds
 
-#### Cache Object
-- **Driver**: Active cache driver
-
 #### Filesize Object
 - **Files**: Sizes of specific monitored files (configurable)
 
@@ -470,12 +469,13 @@ To configure which metrics are sent or to monitor specific files/folders, publis
         'system' => true,
         'queue' => true,
         'database' => true,
-        'cache' => false,
         'filesize' => true,
         'foldersize' => true,
         
+        // Node.js and npm versions (enabled by default, two cheap version commands)
+        'node_npm' => true,
+
         // Optional expensive metrics (disabled by default)
-        'node_npm' => false,              // Node.js and npm versions
         'dependency_checks' => false,     // Outdated package counts
         'security_audits' => false,       // Security vulnerability counts
 
@@ -504,7 +504,7 @@ To configure which metrics are sent or to monitor specific files/folders, publis
 ],
 ```
 
-> **Performance Note:** The optional metrics (`node_npm`, `dependency_checks`, `security_audits`, `system_updates`) can be slow as they execute shell commands. Enable these only if you need them and have increased the job timeout accordingly (default: 120 seconds). `os` and `host` are cheap — a file read and pure PHP respectively.
+> **Performance Note:** The optional metrics (`dependency_checks`, `security_audits`, `system_updates`) can be slow as they execute shell commands. Enable these only if you need them and have increased the job timeout accordingly (default: 120 seconds). `os` and `host` are cheap — a file read and pure PHP respectively.
 
 > **Note:** Status pushing relies on Laravel's scheduler. Ensure you have the scheduler running:
 > `* * * * * cd /path-to-your-project && php artisan schedule:run >> /dev/null 2>&1`
@@ -520,12 +520,18 @@ The package automatically redacts sensitive fields from your logs. The following
 | `credit_card` | credit_card, credit_card_number |
 | `card_number` | card_number |
 | `cvv` | cvv, card_cvv |
-| `api_key` | api_key, stripe_api_key |
+| `api_key` | api_key, stripe_api_key, apiKey, x-api-key |
 | `secret` | secret, client_secret |
-| `token` | token, access_token, refresh_token |
+| `token` | token, access_token, refreshToken |
 | `authorization` | authorization |
+| `cookie` | cookie, set_cookie |
+| `session` | session, session_id |
+| `x-xsrf-token` | x-xsrf-token, X-XSRF-TOKEN |
+| `private_key` | private_key, privateKey |
 
 Only array **keys** are matched, and only string keys: lists (arrays with integer keys) are traversed but their values are shipped unchanged. `['fields' => ['password', 'token']]` ships as-is — `password` is a value there, not a key. Nested arrays inside a list are still sanitized, so `['changes' => [['user' => 'alice', 'password' => 'x']]]` redacts the password.
+
+Field names match as whole words in any key style (camelCase, snake_case, kebab-case), so `apiKey`, `x-api-key` and `API_KEY` all match `api_key`, while `secretary` does not match `secret`. A sensitive key holding an array (e.g. request headers) is redacted whole. Sensitive query and fragment parameters in `request_url` and `referrer` are redacted too (`?token=[REDACTED]&page=2`).
 
 Add additional fields to sanitize in the config file:
 
@@ -533,6 +539,10 @@ Add additional fields to sanitize in the config file:
 'sanitize_fields' => [
     'password',
     'credit_card',
+    'cookie',
+    'session',
+    'x-xsrf-token',
+    'private_key',
     'ssn', // add your own
     // ...
 ],
@@ -593,6 +603,8 @@ LOG_SHIPPER_ENDPOINT=https://secure.example.com/api/ingest
 LOG_SHIPPER_ENDPOINT=http://insecure.example.com/api/ingest
 ```
 
+The same rule covers the status endpoint (`LOG_SHIPPER_STATUS_ENDPOINT` or the `/stats` URL derived from `LOG_SHIPPER_ENDPOINT`). A refused status push writes a local warning instead of sending.
+
 ### Payload Size Limits
 
 To prevent denial-of-service attacks via oversized log payloads, the package limits the maximum payload size:
@@ -602,7 +614,7 @@ To prevent denial-of-service attacks via oversized log payloads, the package lim
 'max_payload_size' => env('LOG_SHIPPER_MAX_PAYLOAD_SIZE', 1048576), // 1MB default
 ```
 
-If a payload exceeds this limit, the context will be truncated and marked with `_truncated: true`.
+If a payload exceeds this limit, its `context` is replaced by `{"_truncated": true, "_original_size": <bytes>}`, a large `extra` by `{"_truncated": true}`, and the payload carries top-level `_truncated` / `_original_size` markers.
 
 ## Sync Mode
 
@@ -611,6 +623,8 @@ By default, logs are shipped via queued jobs for better performance. If you pref
 ```env
 LOG_SHIPPER_QUEUE=sync
 ```
+
+`LOG_SHIPPER_QUEUE=default` follows the app's `QUEUE_CONNECTION`, so an app running on `sync` ships every log inline in the request. Set `LOG_SHIPPER_QUEUE` explicitly (e.g. `redis`) to avoid that.
 
 > **Note:** Sync mode will block your application until the HTTP request completes. Use queued mode in production for better performance.
 
@@ -624,18 +638,20 @@ Add the following to your `.env` file:
 
 ```env
 LOG_SHIPPER_BATCH_ENABLED=true
-LOG_SHIPPER_BATCH_SIZE=100
+LOG_SHIPPER_BATCH_SIZE=100 # Values above 100 are clamped to 100 (server limit)
 LOG_SHIPPER_BATCH_INTERVAL=1 # Run every minute
+LOG_SHIPPER_BATCH_MAX_BUFFER=10000 # Max buffered logs; oldest are dropped when full
 ```
 
 ### Requirements
 
 - Redis connection (configured in `config/database.php`)
+- `LOG_SHIPPER_BATCH_DRIVER=cache` exists for development or low traffic only: it locks and rewrites the whole buffer on every log line, and is capped at 1000 entries.
 - Laravel Scheduler running
 
 ### How it Works
 
-1. Logs are pushed to a Redis list (`log_shipper_buffer`) instead of dispatching a job immediately.
+1. Logs are pushed to a Redis list (`log_shipper_buffer`) instead of dispatching a job immediately. The list is capped at `LOG_SHIPPER_BATCH_MAX_BUFFER` entries; if the scheduler falls behind, the oldest are dropped.
 2. A scheduled command (`log-shipper:ship-batch`) runs every minute.
 3. The command pops logs in batches (default: 100) and dispatches a single job per batch.
 4. The job ships the batch to the log server in a single HTTP request.
@@ -646,7 +662,7 @@ This package includes built-in mechanisms to ensure your application remains sta
 
 ### Retries & Backoff
 
-If the log server returns a 4xx/5xx error or is unreachable, the job will automatically retry based on your configuration.
+If the log server returns a 5xx or 429 error or is unreachable, the job will automatically retry based on your configuration. Any other 4xx fails the job at once without retries and goes to the fallback channel: 401, 403 and 404 (wrong key or endpoint) count toward the circuit breaker, 413 and 422 (payload rejected) do not.
 
 ```php
 // config/log-shipper.php
@@ -662,12 +678,12 @@ To prevent your queue from being flooded with failing jobs during an outage, the
 // config/log-shipper.php
 'circuit_breaker' => [
     'enabled' => true,
-    'failure_threshold' => 5, // Open circuit after 5 consecutive failures
+    'failure_threshold' => 5, // Open circuit after 5 failures within `duration` seconds
     'duration' => 300, // Keep circuit open for 5 minutes
 ],
 ```
 
-When the circuit is open, logs are skipped entirely to protect your application's performance.
+Failed HTTP requests, an unreachable queue and a failing batch buffer all count as failures. When the circuit is open, logs are written to the fallback channel instead of being shipped, to protect your application's performance. Without a fallback channel they are skipped.
 
 ## Fallback Channel
 

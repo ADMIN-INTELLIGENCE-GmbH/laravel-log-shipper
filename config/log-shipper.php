@@ -78,6 +78,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Max Payload Size
+    |--------------------------------------------------------------------------
+    |
+    | Bytes of JSON per log entry. Larger entries are sent with their context
+    | replaced by a truncation marker.
+    |
+    */
+    'max_payload_size' => env('LOG_SHIPPER_MAX_PAYLOAD_SIZE', 1048576),
+
+    /*
+    |--------------------------------------------------------------------------
     | Circuit Breaker
     |--------------------------------------------------------------------------
     |
@@ -97,16 +108,20 @@ return [
     |--------------------------------------------------------------------------
     |
     | Buffer logs and ship them in batches to reduce queue pressure.
-    | Requires a Redis connection.
+    | Use the 'redis' driver. The 'cache' driver is for development or
+    | low traffic only: it takes a lock and rewrites the whole buffer on
+    | every log line. The buffer keeps at most max_buffer_size entries
+    | and drops the oldest ones when full.
     |
     */
     'batch' => [
         'enabled' => env('LOG_SHIPPER_BATCH_ENABLED', false),
-        'driver' => env('LOG_SHIPPER_BATCH_DRIVER', 'redis'), // 'redis' or 'cache'
+        'driver' => env('LOG_SHIPPER_BATCH_DRIVER', 'redis'), // 'redis' (recommended) or 'cache' (dev/low traffic only)
         'size' => env('LOG_SHIPPER_BATCH_SIZE', 100), // Number of logs to ship at once
         'buffer_key' => env('LOG_SHIPPER_BATCH_KEY', 'log_shipper_buffer'),
         'connection' => env('LOG_SHIPPER_BATCH_CONNECTION', 'default'), // Redis connection or Cache store
         'interval' => env('LOG_SHIPPER_BATCH_INTERVAL', 1), // Minutes between batch runs
+        'max_buffer_size' => env('LOG_SHIPPER_BATCH_MAX_BUFFER', 10000), // Redis driver only, oldest entries dropped beyond this
     ],
 
     /*
@@ -128,6 +143,10 @@ return [
         'secret',
         'token',
         'authorization',
+        'cookie',
+        'session',
+        'x-xsrf-token',
+        'private_key',
     ],
 
     /*
@@ -190,15 +209,14 @@ return [
             'system' => true,
             'queue' => true,
             'database' => true,
-            'cache' => true,
             'filesize' => true,
             'foldersize' => true,
             // Optional: Node.js and npm versions (requires node/npm installed)
             'node_npm' => true,
             // Optional: Check for outdated dependencies (can be slow, ~10-30s)
-            'dependency_checks' => true,
+            'dependency_checks' => false,
             // Optional: Security audit checks (can be slow, ~10-30s)
-            'security_audits' => true,
+            'security_audits' => false,
             // Operating system identity: distribution, version, kernel, architecture.
             // Cheap - a single file read on Linux, no shell commands.
             'os' => true,

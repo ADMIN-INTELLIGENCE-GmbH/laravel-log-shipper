@@ -20,7 +20,8 @@ class ShipBatchLogsCommand extends Command
             return;
         }
 
-        $size = (int) config('log-shipper.batch.size', 100);
+        // The log server accepts at most 100 entries per batch
+        $size = min((int) config('log-shipper.batch.size', 100), 100);
 
         try {
             /** @var LogBufferInterface $buffer */

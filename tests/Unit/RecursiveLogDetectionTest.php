@@ -2,7 +2,9 @@
 
 namespace AdminIntelligence\LogShipper\Tests\Unit;
 
+use AdminIntelligence\LogShipper\Jobs\ShipBatchJob;
 use AdminIntelligence\LogShipper\Jobs\ShipLogJob;
+use AdminIntelligence\LogShipper\Jobs\ShipStatusJob;
 use AdminIntelligence\LogShipper\Logging\LogShipperHandler;
 use AdminIntelligence\LogShipper\Tests\TestCase;
 use DateTimeImmutable;
@@ -64,7 +66,7 @@ class RecursiveLogDetectionTest extends TestCase
             $reflection->setAccessible(true);
             $reflection->setValue($e, [
                 [
-                    'file' => '/app/vendor/package/AdminIntelligence/LogShipper/Jobs/ShipLogJob.php',
+                    'file' => (new \ReflectionClass(ShipLogJob::class))->getFileName(),
                     'line' => 50,
                     'function' => 'handle',
                 ],
@@ -219,5 +221,56 @@ class RecursiveLogDetectionTest extends TestCase
         // but this documents the actual behavior)
         // If lowercase doesn't match, job will be dispatched
         Queue::assertPushed(ShipLogJob::class);
+    }
+
+    #[Test]
+    public function blocks_logs_mentioning_ship_batch_job_in_message()
+    {
+        $handler = new LogShipperHandler(Level::Error);
+
+        $handler->handle($this->recordWithException('Job failed: ' . ShipBatchJob::class));
+
+        Queue::assertNothingPushed();
+    }
+
+    #[Test]
+    public function blocks_logs_with_batch_job_file_in_trace()
+    {
+        $handler = new LogShipperHandler(Level::Error);
+
+        // Real installed path: vendor/adminintelligence/laravel-log-shipper/src/Jobs/ShipBatchJob.php
+        $handler->handle($this->recordWithException('Connection refused', [
+            ['file' => (new \ReflectionClass(ShipBatchJob::class))->getFileName(), 'line' => 61, 'function' => 'handle'],
+        ]));
+
+        Queue::assertNothingPushed();
+    }
+
+    #[Test]
+    public function blocks_logs_with_status_job_class_in_trace()
+    {
+        $handler = new LogShipperHandler(Level::Error);
+
+        $handler->handle($this->recordWithException('Connection refused', [
+            ['class' => ShipStatusJob::class, 'type' => '->', 'function' => 'handle'],
+        ]));
+
+        Queue::assertNothingPushed();
+    }
+
+    protected function recordWithException(string $message, array $trace = []): LogRecord
+    {
+        $e = new \Exception($message);
+        $reflection = new \ReflectionProperty(\Exception::class, 'trace');
+        $reflection->setValue($e, $trace);
+
+        return new LogRecord(
+            datetime: new DateTimeImmutable,
+            channel: 'test',
+            level: Level::Error,
+            message: $message,
+            context: ['exception' => $e],
+            extra: []
+        );
     }
 }

@@ -7,11 +7,13 @@ namespace AdminIntelligence\LogShipper\Tests\Feature;
 use AdminIntelligence\LogShipper\Jobs\ShipLogJob;
 use AdminIntelligence\LogShipper\Logging\CreateCustomLogger;
 use AdminIntelligence\LogShipper\Tests\TestCase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use ReflectionClass;
+use RuntimeException;
 
 class LogShippingIntegrationTest extends TestCase
 {
@@ -119,6 +121,36 @@ class LogShippingIntegrationTest extends TestCase
         Log::error('This should not crash');
 
         $this->assertTrue(true); // If we get here, error was handled gracefully
+    }
+
+    #[Test]
+    public function it_does_not_throw_when_the_cache_store_fails(): void
+    {
+        Queue::fake();
+        config(['log-shipper.circuit_breaker.enabled' => true]);
+        Cache::shouldReceive('has')->andThrow(new RuntimeException('Redis down'));
+
+        Log::error('Cache store is down');
+
+        Queue::assertNotPushed(ShipLogJob::class);
+    }
+
+    #[Test]
+    public function it_does_not_throw_when_a_context_object_cannot_be_cast(): void
+    {
+        Queue::fake();
+
+        $broken = new class
+        {
+            public function __toString(): string
+            {
+                throw new RuntimeException('cannot cast');
+            }
+        };
+
+        Log::error('Broken context object', ['thing' => $broken]);
+
+        Queue::assertNotPushed(ShipLogJob::class);
     }
 
     #[Test]

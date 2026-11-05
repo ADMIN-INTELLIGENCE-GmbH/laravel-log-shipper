@@ -110,4 +110,34 @@ class CommandRunnerTest extends TestCase
 
         $this->assertSame('done', $output);
     }
+
+    #[Test]
+    public function it_runs_the_command_in_the_given_working_directory(): void
+    {
+        $runner = new CommandRunner;
+        $dir = realpath(sys_get_temp_dir());
+
+        $this->assertSame($dir, realpath((string) $runner->run('pwd', 5, $dir)));
+    }
+
+    #[Test]
+    public function it_leaves_no_child_running_after_a_timeout_in_a_working_directory(): void
+    {
+        $runner = new CommandRunner;
+
+        if (!$runner->commandExists('pgrep')) {
+            $this->markTestSkipped('pgrep is not installed.');
+        }
+
+        // Same shape as the status job's composer/npm calls: cwd, exec, stderr redirect.
+        $runner->run('exec sleep 43.217 2>/dev/null', 1, sys_get_temp_dir());
+        usleep(200000);
+
+        $leftover = trim((string) shell_exec('pgrep -f "sleep 43.217"'));
+        if ($leftover !== '') {
+            shell_exec('pkill -f "sleep 43.217"');
+        }
+
+        $this->assertSame('', $leftover, 'sleep survived the timeout');
+    }
 }

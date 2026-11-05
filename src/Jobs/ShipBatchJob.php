@@ -3,12 +3,14 @@
 namespace AdminIntelligence\LogShipper\Jobs;
 
 use AdminIntelligence\LogShipper\Jobs\Concerns\ShipsLogs;
+use AdminIntelligence\LogShipper\Utils\Sanitizer;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class ShipBatchJob implements ShouldQueue
 {
@@ -66,6 +68,18 @@ class ShipBatchJob implements ShouldQueue
                 ])
                 ->post($endpoint, $this->batch);
 
+            // A rejected request stays rejected: fail at once (failed() still runs), no retry
+            if ($response->clientError() && $response->status() !== 429) {
+                // Bad key or endpoint (401/403/404) hits every log: let the breaker trip. Payload errors (413/422) stay out.
+                if (in_array($response->status(), [401, 403, 404], true)) {
+                    $this->recordFailure($response->toException());
+                }
+
+                $this->fail($response->toException());
+
+                return;
+            }
+
             if (!$response->successful()) {
                 $response->throw();
             }
@@ -74,6 +88,43 @@ class ShipBatchJob implements ShouldQueue
         } catch (\Throwable $e) {
             $this->recordFailure($e);
             throw $e;
+        }
+    }
+
+    /**
+     * Handle a job failure: keep every log of the batch in the fallback channel.
+     */
+    public function failed(?\Throwable $exception): void
+    {
+        $fallbackChannel = config('log-shipper.fallback_channel');
+
+        // Prevent infinite loop if fallback channel is log_shipper
+        if (empty($fallbackChannel) || $fallbackChannel === 'log_shipper') {
+            return;
+        }
+
+        // Prevent infinite loops: Disable log shipping while writing to fallback, restore the previous value after
+        $wasEnabled = config('log-shipper.enabled');
+        config(['log-shipper.enabled' => false]);
+
+        try {
+            $sanitizeFields = config('log-shipper.sanitize_fields', []);
+
+            foreach ($this->batch as $payload) {
+                try {
+                    $payload = is_array($payload) ? $payload : [];
+                    $context = $payload['context'] ?? [];
+                    $context = is_array($context) ? $context : [];
+                    $context['log_shipper_failure'] = $exception?->getMessage() ?? 'batch failed';
+                    $context['original_payload'] = Sanitizer::sanitize($payload, $sanitizeFields);
+
+                    Log::channel($fallbackChannel)->log($payload['level'] ?? 'error', $payload['message'] ?? 'Unknown error', $context);
+                } catch (\Throwable) {
+                    // One bad entry must not cost the rest of the batch
+                }
+            }
+        } finally {
+            config(['log-shipper.enabled' => $wasEnabled]);
         }
     }
 }

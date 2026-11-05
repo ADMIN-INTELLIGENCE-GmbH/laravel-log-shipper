@@ -8,8 +8,10 @@ use AdminIntelligence\LogShipper\Jobs\ShipLogJob;
 use AdminIntelligence\LogShipper\Logging\LogShipperHandler;
 use AdminIntelligence\LogShipper\Tests\TestCase;
 use DateTimeImmutable;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Request;
 use Monolog\Level;
 use Monolog\LogRecord;
 use PHPUnit\Framework\Attributes\Test;
@@ -22,6 +24,12 @@ class PayloadSizeLimitTest extends TestCase
         parent::setUp();
         Queue::fake();
         Config::set('log-shipper.enabled', true);
+    }
+
+    #[Test]
+    public function max_payload_size_is_in_the_shipped_config()
+    {
+        $this->assertSame(1048576, config('log-shipper.max_payload_size'));
     }
 
     #[Test]
@@ -82,7 +90,10 @@ class PayloadSizeLimitTest extends TestCase
             return isset($payload['_truncated'])
                 && $payload['_truncated'] === true
                 && isset($payload['_original_size'])
-                && $payload['context'] === '[TRUNCATED: Payload too large]';
+                // The server validates context as nullable|array, a string would be rejected with a 422
+                && is_array($payload['context'])
+                && $payload['context']['_truncated'] === true
+                && $payload['context']['_original_size'] === $payload['_original_size'];
         });
     }
 
@@ -196,14 +207,119 @@ class PayloadSizeLimitTest extends TestCase
         Queue::assertPushed(ShipLogJob::class);
     }
 
-    protected function createLogRecord(string $message, Level $level): LogRecord
+    #[Test]
+    public function string_fields_are_clamped_to_server_limits()
+    {
+        Config::set('log-shipper.send_context', ['user_agent' => true, 'referrer' => true]);
+        Request::instance()->headers->set('User-Agent', str_repeat('u', 2000));
+        Request::instance()->headers->set('Referer', 'https://example.com/' . str_repeat('r', 3000));
+
+        $handler = new LogShipperHandler(Level::Error);
+        $handler->handle($this->createLogRecord(str_repeat('ä', 70000), Level::Error));
+
+        Queue::assertPushed(ShipLogJob::class, function ($job) {
+            $payload = $this->payloadOf($job);
+
+            return mb_strlen($payload['message']) === 65535
+                && mb_strlen($payload['user_agent']) === 1024
+                && mb_strlen($payload['referrer']) === 2048;
+        });
+    }
+
+    #[Test]
+    public function url_fields_are_clamped_after_query_redaction()
+    {
+        // "token=a" grows to "token=[REDACTED]" during sanitizing; a clamp before that would let it pass 2048
+        Config::set('log-shipper.send_context', ['referrer' => true]);
+        $url = 'https://example.com/?token=a&x=';
+        Request::instance()->headers->set('Referer', $url . str_repeat('r', 2048 - strlen($url)));
+
+        (new LogShipperHandler(Level::Error))->handle($this->createLogRecord('Test', Level::Error));
+
+        Queue::assertPushed(ShipLogJob::class, function ($job) {
+            $referrer = $this->payloadOf($job)['referrer'];
+
+            return mb_strlen($referrer) === 2048 && str_contains($referrer, 'token=[REDACTED]');
+        });
+    }
+
+    #[Test]
+    public function nan_and_inf_do_not_skip_the_size_check()
+    {
+        Config::set('log-shipper.max_payload_size', 500);
+
+        (new LogShipperHandler(Level::Error))->handle(
+            $this->createLogRecord('Test', Level::Error, ['nan' => NAN, 'inf' => INF, 'big' => str_repeat('x', 1000)])
+        );
+
+        Queue::assertPushed(ShipLogJob::class, function ($job) {
+            $payload = $this->payloadOf($job);
+
+            return ($payload['_truncated'] ?? false) === true && json_encode($payload) !== false;
+        });
+    }
+
+    #[Test]
+    public function invalid_utf8_is_substituted_before_dispatch()
+    {
+        $handler = new LogShipperHandler(Level::Error);
+        $record = new LogRecord(
+            datetime: new DateTimeImmutable,
+            channel: 'test',
+            level: Level::Error,
+            message: "bad \xB1 byte",
+            context: ['raw' => "\xC3\x28"],
+            extra: []
+        );
+
+        $handler->handle($record);
+
+        Queue::assertPushed(ShipLogJob::class, function ($job) {
+            $payload = $this->payloadOf($job);
+
+            return json_encode($payload) !== false
+                && mb_check_encoding($payload['message'], 'UTF-8')
+                && $payload['context']['raw'] === "\u{FFFD}(";
+        });
+    }
+
+    #[Test]
+    public function invalid_utf8_is_substituted_before_buffer_push()
+    {
+        Config::set('log-shipper.batch.enabled', true);
+        Config::set('log-shipper.batch.driver', 'cache');
+        Config::set('log-shipper.batch.connection', 'array');
+        Config::set('log-shipper.batch.buffer_key', 'utf8_buffer');
+
+        $handler = new LogShipperHandler(Level::Error);
+        $handler->handle(new LogRecord(
+            datetime: new DateTimeImmutable,
+            channel: 'test',
+            level: Level::Error,
+            message: 'Test',
+            context: ['raw' => "bad \xB1 byte"],
+            extra: []
+        ));
+
+        $buffer = Cache::store('array')->get('utf8_buffer');
+        $this->assertCount(1, $buffer);
+        $this->assertNotFalse(json_encode($buffer[0]));
+        $this->assertSame("bad \u{FFFD} byte", $buffer[0]['context']['raw']);
+    }
+
+    protected function payloadOf(ShipLogJob $job): array
+    {
+        return (new ReflectionClass($job))->getProperty('payload')->getValue($job);
+    }
+
+    protected function createLogRecord(string $message, Level $level, array $context = []): LogRecord
     {
         return new LogRecord(
             datetime: new DateTimeImmutable,
             channel: 'test',
             level: $level,
             message: $message,
-            context: [],
+            context: $context,
             extra: []
         );
     }

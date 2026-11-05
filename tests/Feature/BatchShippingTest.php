@@ -44,13 +44,19 @@ class BatchShippingTest extends TestCase
             ->with('default')
             ->andReturnSelf();
 
-        Redis::shouldReceive('rpush')
+        $pipe = Mockery::mock();
+        $pipe->shouldReceive('rpush')
             ->once()
             ->with('test_buffer', Mockery::on(function ($arg) {
                 $json = json_decode($arg, true);
 
                 return $json['message'] === 'Test batch log';
             }));
+        $pipe->shouldReceive('ltrim')->once()->with('test_buffer', -10000, -1);
+
+        Redis::shouldReceive('transaction')
+            ->once()
+            ->andReturnUsing(fn (callable $callback) => $callback($pipe));
 
         Log::error('Test batch log');
     }
@@ -115,5 +121,24 @@ class BatchShippingTest extends TestCase
 
         // Verify buffer is empty
         $this->assertEmpty(Cache::store('array')->get('test_buffer'));
+    }
+
+    public function test_command_clamps_batch_size_to_server_limit()
+    {
+        Config::set('log-shipper.batch.driver', 'cache');
+        Config::set('log-shipper.batch.connection', 'array');
+        Config::set('log-shipper.batch.size', 500);
+        Queue::fake();
+
+        Cache::store('array')->put('test_buffer', array_fill(0, 150, ['message' => 'Log']));
+
+        $this->artisan('log-shipper:ship-batch')
+            ->assertExitCode(0);
+
+        // The server rejects batches over 100 entries with a 422
+        Queue::assertPushed(ShipBatchJob::class, 2);
+        Queue::assertPushed(ShipBatchJob::class, function (ShipBatchJob $job) {
+            return count((new \ReflectionClass($job))->getProperty('batch')->getValue($job)) <= 100;
+        });
     }
 }

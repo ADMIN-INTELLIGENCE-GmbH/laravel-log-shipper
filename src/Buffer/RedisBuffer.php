@@ -13,7 +13,22 @@ class RedisBuffer implements LogBufferInterface
 
     public function push(array $payload): void
     {
-        Redis::connection($this->connection)->rpush($this->key, json_encode($payload));
+        // SECURITY: Cap the list so a stalled scheduler cannot fill Redis.
+        // Keeps the newest entries and drops the oldest, like CacheBuffer.
+        $max = (int) config('log-shipper.batch.max_buffer_size', 10000);
+        // 0 would make ltrim keep everything, a negative value would drop the newest entries
+        $max = $max < 1 ? 10000 : $max;
+        $json = json_encode($payload);
+
+        // rpush(false) would store an empty entry that popBatch drops anyway
+        if ($json === false) {
+            return;
+        }
+
+        Redis::connection($this->connection)->transaction(function ($redis) use ($json, $max) {
+            $redis->rpush($this->key, $json);
+            $redis->ltrim($this->key, -$max, -1);
+        });
     }
 
     public function popBatch(int $size): array

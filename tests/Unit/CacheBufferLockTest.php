@@ -202,4 +202,18 @@ class CacheBufferLockTest extends TestCase
         // All should be stored
         $this->assertEquals(3, $buffer->size());
     }
+
+    #[Test]
+    public function default_store_name_maps_to_the_app_default_cache_store()
+    {
+        config(['cache.default' => 'array']);
+
+        // 'default' is the batch.connection default but no cache store has that name
+        $buffer = new CacheBuffer('default', 'test_buffer');
+
+        $buffer->push(['message' => 'Log 1']);
+
+        $this->assertEquals(1, $buffer->size());
+        $this->assertCount(1, Cache::store('array')->get('test_buffer'));
+    }
 }

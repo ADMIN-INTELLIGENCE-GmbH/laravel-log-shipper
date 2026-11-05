@@ -10,9 +10,15 @@ class CacheBuffer implements LogBufferInterface
     protected const MAX_BUFFER_SIZE = 1000;
 
     public function __construct(
-        protected string $store,
+        protected ?string $store,
         protected string $key
-    ) {}
+    ) {
+        // batch.connection defaults to 'default', which is a Redis connection
+        // name, not a cache store: use the app's default store instead.
+        if ($this->store === 'default' && config('cache.stores.default') === null) {
+            $this->store = null;
+        }
+    }
 
     public function push(array $payload): void
     {

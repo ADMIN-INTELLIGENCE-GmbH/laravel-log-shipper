@@ -69,11 +69,12 @@ class ShipStatusJobHostMetricsTest extends TestCase
     }
 
     #[Test]
-    public function it_omits_os_information_when_the_metric_is_not_configured(): void
+    public function it_ships_os_information_when_the_metric_is_not_configured(): void
     {
+        // Matches the shipped config, so older published configs behave the same
         (new ShipStatusJob)->handle();
 
-        $this->assertPayloadMissingKey('os');
+        $this->assertPayloadHasKey('os');
     }
 
     #[Test]
@@ -104,11 +105,12 @@ class ShipStatusJobHostMetricsTest extends TestCase
     }
 
     #[Test]
-    public function it_omits_host_information_when_the_metric_is_not_configured(): void
+    public function it_ships_host_information_when_the_metric_is_not_configured(): void
     {
+        // Matches the shipped config, so older published configs behave the same
         (new ShipStatusJob)->handle();
 
-        $this->assertPayloadMissingKey('host');
+        $this->assertPayloadHasKey('host');
     }
 
     #[Test]

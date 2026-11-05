@@ -16,15 +16,8 @@ class TestStatusCommand extends Command
         $this->info('Testing status metrics collection...');
         $this->newLine();
 
-        // Create a temporary job instance to access the protected methods
-        $job = new ShipStatusJob;
-        $reflectionClass = new \ReflectionClass($job);
-
-        // Test collectMetrics (the full payload)
         $this->info('Full Metrics Payload:');
-        $collectMetrics = $reflectionClass->getMethod('collectMetrics');
-        $collectMetrics->setAccessible(true);
-        $fullMetrics = $collectMetrics->invoke($job);
+        $fullMetrics = (new ShipStatusJob)->collectMetrics();
 
         $this->line(json_encode($fullMetrics, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 

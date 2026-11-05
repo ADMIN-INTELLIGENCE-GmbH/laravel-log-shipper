@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdminIntelligence\LogShipper\Jobs;
 
+use AdminIntelligence\LogShipper\Jobs\Concerns\ShipsLogs;
 use AdminIntelligence\LogShipper\Status\CommandRunner;
 use AdminIntelligence\LogShipper\Status\HostInfoCollector;
 use AdminIntelligence\LogShipper\Status\OsInfoCollector;
@@ -14,17 +15,18 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
+use PDOException;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use Throwable;
 
 class ShipStatusJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ShipsLogs;
 
     public int $tries = 1;
 
@@ -42,7 +44,7 @@ class ShipStatusJob implements ShouldQueue
         $this->ship($payload);
     }
 
-    protected function collectMetrics(): array
+    public function collectMetrics(): array
     {
         $metrics = [
             'timestamp' => now()->toIso8601String(),
@@ -67,10 +69,6 @@ class ShipStatusJob implements ShouldQueue
             $metrics['database'] = $this->getDatabaseMetrics();
         }
 
-        if ($enabledMetrics['cache'] ?? false) {
-            $metrics['cache'] = $this->getCacheMetrics();
-        }
-
         if ($enabledMetrics['filesize'] ?? true) {
             $metrics['filesize'] = $this->getFilesizeMetrics();
         }
@@ -79,11 +77,11 @@ class ShipStatusJob implements ShouldQueue
             $metrics['foldersize'] = $this->getFoldersizeMetrics();
         }
 
-        if ($enabledMetrics['os'] ?? false) {
+        if ($enabledMetrics['os'] ?? true) {
             $metrics['os'] = $this->osInfoCollector()->collect();
         }
 
-        if ($enabledMetrics['host'] ?? false) {
+        if ($enabledMetrics['host'] ?? true) {
             $metrics['host'] = $this->hostInfoCollector()->collect();
         }
 
@@ -108,7 +106,7 @@ class ShipStatusJob implements ShouldQueue
         ];
 
         // Optional dependency checks (can be slow, so they're configurable)
-        if (config('log-shipper.status.metrics.node_npm', false)) {
+        if (config('log-shipper.status.metrics.node_npm', true)) {
             $metrics['node_version'] = $this->getNodeVersion();
             $metrics['npm_version'] = $this->getNpmVersion();
         }
@@ -357,35 +355,34 @@ class ShipStatusJob implements ShouldQueue
         }
     }
 
-    protected function getComposerOutdatedCount(): int
+    /**
+     * Null when the check could not run or its output made no sense, so the
+     * server can tell "unknown" apart from "none".
+     */
+    protected function getComposerOutdatedCount(): ?int
     {
         try {
             $basePath = base_path();
 
             if (!is_dir($basePath) || !is_readable($basePath)) {
-                return 0;
+                return null;
             }
 
-            $escapedPath = escapeshellarg($basePath);
-            $output = $this->runCommandWithTimeout("cd {$escapedPath} && composer outdated --direct --format=json 2>/dev/null", 30);
+            $output = $this->runCommandWithTimeout('exec composer outdated --direct --format=json 2>/dev/null', 30, $basePath);
 
             if (!$output) {
-                return 0;
+                return null;
             }
 
             $data = json_decode($output, true);
 
-            if (!is_array($data)) {
-                return 0;
-            }
-
-            return isset($data['installed']) && is_array($data['installed']) ? count($data['installed']) : 0;
+            return isset($data['installed']) && is_array($data['installed']) ? count($data['installed']) : null;
         } catch (Throwable) {
-            return 0;
+            return null;
         }
     }
 
-    protected function getNpmOutdatedCount(): int
+    protected function getNpmOutdatedCount(): ?int
     {
         try {
             $basePath = base_path();
@@ -394,35 +391,34 @@ class ShipStatusJob implements ShouldQueue
                 return 0;
             }
 
-            $escapedPath = escapeshellarg($basePath);
-            $output = $this->runCommandWithTimeout("cd {$escapedPath} && npm outdated --json 2>/dev/null", 30);
+            $output = $this->runCommandWithTimeout('exec npm outdated --json 2>/dev/null', 30, $basePath);
 
             if (!$output) {
-                return 0;
+                return null;
             }
 
             $data = json_decode($output, true);
 
-            return is_array($data) ? count($data) : 0;
+            // npm prints {"error": {...}} as JSON when it fails
+            return is_array($data) && !isset($data['error']) ? count($data) : null;
         } catch (Throwable) {
-            return 0;
+            return null;
         }
     }
 
-    protected function getComposerAuditCount(): int
+    protected function getComposerAuditCount(): ?int
     {
         try {
             $basePath = base_path();
 
             if (!is_dir($basePath) || !is_readable($basePath)) {
-                return 0;
+                return null;
             }
 
-            $escapedPath = escapeshellarg($basePath);
-            $output = $this->runCommandWithTimeout("cd {$escapedPath} && composer audit --format=json 2>/dev/null", 30);
+            $output = $this->runCommandWithTimeout('exec composer audit --format=json 2>/dev/null', 30, $basePath);
 
             if (!$output) {
-                return 0;
+                return null;
             }
 
             $data = json_decode($output, true);
@@ -431,13 +427,13 @@ class ShipStatusJob implements ShouldQueue
                 return count($data['advisories']);
             }
 
-            return 0;
+            return null;
         } catch (Throwable) {
-            return 0;
+            return null;
         }
     }
 
-    protected function getNpmAuditCount(): int
+    protected function getNpmAuditCount(): ?int
     {
         try {
             $basePath = base_path();
@@ -446,11 +442,10 @@ class ShipStatusJob implements ShouldQueue
                 return 0;
             }
 
-            $escapedPath = escapeshellarg($basePath);
-            $output = $this->runCommandWithTimeout("cd {$escapedPath} && npm audit --json 2>/dev/null", 30);
+            $output = $this->runCommandWithTimeout('exec npm audit --json 2>/dev/null', 30, $basePath);
 
             if (!$output) {
-                return 0;
+                return null;
             }
 
             $data = json_decode($output, true);
@@ -465,18 +460,18 @@ class ShipStatusJob implements ShouldQueue
                        ($vulns['critical'] ?? 0));
             }
 
-            return 0;
+            return null;
         } catch (Throwable) {
-            return 0;
+            return null;
         }
     }
 
     /**
      * Run a shell command with a timeout to prevent hanging.
      */
-    protected function runCommandWithTimeout(string $command, int $timeoutSeconds): ?string
+    protected function runCommandWithTimeout(string $command, int $timeoutSeconds, ?string $cwd = null): ?string
     {
-        return $this->commandRunner()->run($command, $timeoutSeconds);
+        return $this->commandRunner()->run($command, $timeoutSeconds, $cwd);
     }
 
     protected function commandRunner(): CommandRunner
@@ -505,6 +500,11 @@ class ShipStatusJob implements ShouldQueue
             $connection = config('log-shipper.queue_connection', 'default');
             $queue = config('log-shipper.queue_name', 'default');
 
+            // Same mapping as the commands: 'default' means the app's default connection
+            if ($connection === 'default') {
+                $connection = config('queue.default');
+            }
+
             return [
                 'size' => Queue::connection($connection)->size($queue),
                 'connection' => $connection,
@@ -527,17 +527,22 @@ class ShipStatusJob implements ShouldQueue
                 'latency_ms' => round(($end - $start) * 1000, 2),
             ];
         } catch (Throwable $e) {
+            // The raw message can carry DB user and host; class plus codes is enough to diagnose.
+            $error = get_class($e);
+
+            if ($e instanceof PDOException) {
+                $error .= ' SQLSTATE[' . ($e->errorInfo[0] ?? $e->getCode()) . ']';
+
+                if (isset($e->errorInfo[1])) {
+                    $error .= ' [' . $e->errorInfo[1] . ']';
+                }
+            }
+
             return [
                 'status' => 'failed',
-                'error' => $e->getMessage(),
+                'error' => $error,
             ];
         }
-    }
-
-    protected function getCacheMetrics(): array
-    {
-        // Cache metrics are driver-specific and hard to generalize
-        return [];
     }
 
     protected function getFilesizeMetrics(): array
@@ -604,21 +609,59 @@ class ShipStatusJob implements ShouldQueue
             return;
         }
 
-        // Append /status to the endpoint if using the default api_endpoint
         if (!config('log-shipper.status.endpoint')) {
-            $endpoint = rtrim($endpoint, '/') . '/status';
+            $endpoint = $this->deriveStatusEndpoint($endpoint);
+        }
+
+        // Same rule as the log jobs: never send the project key over plain http in production
+        if (!$this->validateEndpoint($endpoint)) {
+            $this->reportShipFailure($endpoint, 'endpoint refused, https required in production');
+
+            return;
         }
 
         try {
-            Http::timeout(10)
+            $response = Http::timeout(10)
                 ->withHeaders([
                     'Accept' => 'application/json',
                     'Content-Type' => 'application/json',
                     'X-Project-Key' => $apiKey,
                 ])
                 ->post($endpoint, $payload);
+
+            if ($response->failed()) {
+                $this->reportShipFailure($endpoint, 'HTTP ' . $response->status());
+            }
+        } catch (Throwable $e) {
+            $this->reportShipFailure($endpoint, $e->getMessage());
+        }
+    }
+
+    /**
+     * The log server takes logs at .../api/ingest and status at .../api/stats.
+     * Other servers keep the old behaviour of appending /status.
+     */
+    protected function deriveStatusEndpoint(string $endpoint): string
+    {
+        $endpoint = rtrim($endpoint, '/');
+
+        if (str_ends_with($endpoint, '/ingest')) {
+            return substr($endpoint, 0, -strlen('/ingest')) . '/stats';
+        }
+
+        return $endpoint . '/status';
+    }
+
+    protected function reportShipFailure(string $endpoint, string $reason): void
+    {
+        try {
+            // log_shipper_failure keeps the handler from shipping this line (no loop)
+            Log::warning('[Log Shipper] Status push failed: ' . $reason, [
+                'endpoint' => $endpoint,
+                'log_shipper_failure' => $reason,
+            ]);
         } catch (Throwable) {
-            // Fail silently for status updates
+            // Logging must never break the status job
         }
     }
 

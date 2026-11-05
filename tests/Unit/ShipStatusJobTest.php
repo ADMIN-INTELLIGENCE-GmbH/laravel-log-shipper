@@ -3,8 +3,13 @@
 namespace AdminIntelligence\LogShipper\Tests\Unit;
 
 use AdminIntelligence\LogShipper\Jobs\ShipStatusJob;
+use AdminIntelligence\LogShipper\Tests\Support\FakeCommandRunner;
+use AdminIntelligence\LogShipper\Tests\Support\TestableShipStatusJob;
 use AdminIntelligence\LogShipper\Tests\TestCase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use PDOException;
 use PHPUnit\Framework\Attributes\Test;
 
 class ShipStatusJobTest extends TestCase
@@ -421,5 +426,241 @@ class ShipStatusJobTest extends TestCase
                 && !isset($data['filesize'])
                 && !isset($data['foldersize']);
         });
+    }
+
+    #[Test]
+    public function collect_metrics_is_public_and_sends_no_cache_metric(): void
+    {
+        $this->minimalStatusConfig(['log-shipper.status.metrics.cache' => true]);
+
+        $metrics = (new ShipStatusJob)->collectMetrics();
+
+        $this->assertArrayNotHasKey('cache', $metrics);
+    }
+
+    private function minimalStatusConfig(array $overrides = []): void
+    {
+        config(array_merge([
+            'log-shipper.status.enabled' => true,
+            'log-shipper.status.endpoint' => null,
+            'log-shipper.api_key' => 'test-key',
+            'log-shipper.status.metrics' => ['system' => false, 'queue' => false, 'database' => false, 'filesize' => false, 'foldersize' => false],
+        ], $overrides));
+    }
+
+    #[Test]
+    public function it_derives_the_stats_endpoint_from_an_ingest_endpoint(): void
+    {
+        Http::fake(['*' => Http::response(['status' => 'ok'], 200)]);
+        $this->minimalStatusConfig(['log-shipper.api_endpoint' => 'https://logs.example.com/api/ingest/']);
+
+        (new ShipStatusJob)->handle();
+
+        Http::assertSent(fn ($request) => $request->url() === 'https://logs.example.com/api/stats');
+    }
+
+    #[Test]
+    public function it_appends_status_to_a_non_ingest_endpoint(): void
+    {
+        Http::fake(['*' => Http::response(['status' => 'ok'], 200)]);
+        $this->minimalStatusConfig(['log-shipper.api_endpoint' => 'https://logs.example.com/collect']);
+
+        (new ShipStatusJob)->handle();
+
+        Http::assertSent(fn ($request) => $request->url() === 'https://logs.example.com/collect/status');
+    }
+
+    #[Test]
+    public function it_logs_a_warning_when_the_status_push_fails(): void
+    {
+        Http::fake(['*' => Http::response('Not Found', 404)]);
+        Log::spy();
+        $this->minimalStatusConfig();
+
+        (new ShipStatusJob)->handle();
+
+        Log::shouldHaveReceived('warning')
+            ->once()
+            ->withArgs(fn ($message, $context) => str_contains($message, 'HTTP 404')
+                && isset($context['log_shipper_failure']));
+    }
+
+    #[Test]
+    public function it_maps_the_default_queue_connection_for_queue_metrics(): void
+    {
+        Http::fake(['*' => Http::response(['status' => 'ok'], 200)]);
+        $this->minimalStatusConfig([
+            'log-shipper.queue_connection' => 'default',
+            'queue.default' => 'sync',
+            'log-shipper.status.metrics.queue' => true,
+        ]);
+
+        (new ShipStatusJob)->handle();
+
+        Http::assertSent(fn ($request) => ($request->data()['queue']['connection'] ?? null) === 'sync'
+            && ($request->data()['queue']['size'] ?? null) === 0);
+    }
+
+    #[Test]
+    public function it_refuses_a_derived_http_endpoint_in_production(): void
+    {
+        Http::fake();
+        Log::spy();
+        $this->minimalStatusConfig([
+            'app.env' => 'production',
+            'log-shipper.api_endpoint' => 'http://logs.example.com/api/ingest',
+        ]);
+
+        (new ShipStatusJob)->handle();
+
+        Http::assertNothingSent();
+        Log::shouldHaveReceived('warning')
+            ->once()
+            ->withArgs(fn ($message, $context) => str_contains($message, 'https required')
+                && $context['endpoint'] === 'http://logs.example.com/api/stats'
+                && isset($context['log_shipper_failure']));
+    }
+
+    #[Test]
+    public function it_refuses_an_explicit_http_status_endpoint_in_production(): void
+    {
+        Http::fake();
+        $this->minimalStatusConfig([
+            'app.env' => 'production',
+            'log-shipper.api_endpoint' => 'https://logs.example.com/api/ingest',
+            'log-shipper.status.endpoint' => 'http://logs.example.com/api/stats',
+        ]);
+
+        (new ShipStatusJob)->handle();
+
+        Http::assertNothingSent();
+    }
+
+    #[Test]
+    public function it_sends_to_an_https_endpoint_in_production(): void
+    {
+        Http::fake(['*' => Http::response(['status' => 'ok'], 200)]);
+        $this->minimalStatusConfig([
+            'app.env' => 'production',
+            'log-shipper.api_endpoint' => 'https://logs.example.com/api/ingest',
+        ]);
+
+        (new ShipStatusJob)->handle();
+
+        Http::assertSent(fn ($request) => $request->url() === 'https://logs.example.com/api/stats');
+    }
+
+    #[Test]
+    public function it_reports_a_database_failure_without_the_raw_message(): void
+    {
+        Http::fake(['*' => Http::response(['status' => 'ok'], 200)]);
+        $this->minimalStatusConfig([
+            'log-shipper.api_endpoint' => 'https://logs.example.com/api/ingest',
+            'log-shipper.status.metrics.database' => true,
+        ]);
+
+        $e = new PDOException("SQLSTATE[HY000] [1045] Access denied for user 'app'@'10.0.0.5'");
+        $e->errorInfo = ['HY000', 1045, "Access denied for user 'app'@'10.0.0.5'"];
+        DB::shouldReceive('connection')->andThrow($e);
+
+        (new ShipStatusJob)->handle();
+
+        Http::assertSent(function ($request) {
+            $db = $request->data()['database'] ?? [];
+
+            return $db['status'] === 'failed'
+                && $db['error'] === 'PDOException SQLSTATE[HY000] [1045]'
+                && !str_contains($db['error'], '10.0.0.5');
+        });
+    }
+
+    #[Test]
+    public function dependency_checks_and_security_audits_are_off_by_default(): void
+    {
+        $config = require __DIR__ . '/../../config/log-shipper.php';
+
+        $this->assertFalse($config['status']['metrics']['dependency_checks']);
+        $this->assertFalse($config['status']['metrics']['security_audits']);
+    }
+
+    /**
+     * Runs the status job with dependency checks and audits on, in a base
+     * path that has a package.json, against canned command output.
+     */
+    private function shipDependencyCounts(FakeCommandRunner $runner): array
+    {
+        $dir = sys_get_temp_dir() . '/log-shipper-deps-' . uniqid();
+        mkdir($dir);
+        file_put_contents($dir . '/package.json', '{}');
+        $this->app->setBasePath($dir);
+
+        Http::fake(['*' => Http::response(['status' => 'ok'], 200)]);
+        $this->minimalStatusConfig([
+            'log-shipper.api_endpoint' => 'https://logs.example.com/api/ingest',
+            'log-shipper.status.metrics.system' => true,
+            'log-shipper.status.metrics.dependency_checks' => true,
+            'log-shipper.status.metrics.security_audits' => true,
+        ]);
+
+        $job = new TestableShipStatusJob;
+        $job->fakeRunner = $runner;
+
+        try {
+            $job->handle();
+        } finally {
+            unlink($dir . '/package.json');
+            rmdir($dir);
+        }
+
+        $sent = null;
+        Http::assertSent(function ($request) use (&$sent) {
+            $sent = $request->data()['system'];
+
+            return true;
+        });
+
+        return [$sent, $dir];
+    }
+
+    #[Test]
+    public function it_sends_null_dependency_counts_when_the_commands_fail(): void
+    {
+        [$data] = $this->shipDependencyCounts(new FakeCommandRunner([
+            'composer outdated' => '',
+            'npm outdated' => 'not json',
+            'composer audit' => '{"unexpected": true}',
+            'npm audit' => '{"error": {"code": "ENOLOCK"}}',
+        ]));
+
+        $this->assertNull($data['composer_outdated']);
+        $this->assertNull($data['npm_outdated']);
+        $this->assertNull($data['composer_audit']);
+        $this->assertNull($data['npm_audit']);
+    }
+
+    #[Test]
+    public function it_sends_dependency_counts_when_the_commands_succeed(): void
+    {
+        $runner = new FakeCommandRunner([
+            'composer outdated' => '{"installed": [{"name": "a/b"}, {"name": "c/d"}]}',
+            'npm outdated' => '{}',
+            'composer audit' => '{"advisories": []}',
+            'npm audit' => '{"metadata": {"vulnerabilities": {"low": 1, "high": 2}}}',
+        ]);
+
+        [$data, $dir] = $this->shipDependencyCounts($runner);
+
+        $this->assertSame(2, $data['composer_outdated']);
+        $this->assertSame(0, $data['npm_outdated']);
+        $this->assertSame(0, $data['composer_audit']);
+        $this->assertSame(3, $data['npm_audit']);
+
+        // Runs in the app dir via cwd, not a `cd X &&` prefix that would orphan on timeout
+        $deps = array_keys(array_filter($runner->commands, fn ($c) => preg_match('/composer|npm (outdated|audit)/', $c)));
+        $this->assertCount(4, $deps);
+        foreach ($deps as $i) {
+            $this->assertStringStartsWith('exec ', $runner->commands[$i]);
+            $this->assertSame($dir, $runner->cwds[$i]);
+        }
     }
 }

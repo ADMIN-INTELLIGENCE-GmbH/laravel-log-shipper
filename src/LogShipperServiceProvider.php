@@ -10,7 +10,6 @@ use AdminIntelligence\LogShipper\Buffer\RedisBuffer;
 use AdminIntelligence\LogShipper\Console\Commands\ShipBatchLogsCommand;
 use AdminIntelligence\LogShipper\Console\Commands\ShipStatusCommand;
 use AdminIntelligence\LogShipper\Console\Commands\TestStatusCommand;
-use Illuminate\Console\Command;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
@@ -51,18 +50,21 @@ class LogShipperServiceProvider extends ServiceProvider
             ]);
 
             $this->warnIfMisconfigured();
-            $this->scheduleStatusPush();
-            $this->scheduleBatchShipping();
+
+            // Laravel 10 binds Schedule in the console kernel, after providers boot.
+            $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
+                $this->scheduleStatusPush($schedule);
+                $this->scheduleBatchShipping($schedule);
+            });
         }
     }
 
-    protected function scheduleBatchShipping(): void
+    protected function scheduleBatchShipping(Schedule $schedule): void
     {
         if (!config('log-shipper.batch.enabled', false)) {
             return;
         }
 
-        $schedule = $this->app->make(Schedule::class);
         $interval = (int) config('log-shipper.batch.interval', 1);
 
         // Ensure interval is at least 1 minute and max 59 (cron limitation)
@@ -76,13 +78,12 @@ class LogShipperServiceProvider extends ServiceProvider
         }
     }
 
-    protected function scheduleStatusPush(): void
+    protected function scheduleStatusPush(Schedule $schedule): void
     {
         if (!config('log-shipper.status.enabled', false)) {
             return;
         }
 
-        $schedule = $this->app->make(Schedule::class);
         $minutes = (int) config('log-shipper.status.interval', 5);
 
         // Ensure interval is at least 1 minute
@@ -112,6 +113,21 @@ class LogShipperServiceProvider extends ServiceProvider
         $apiKey = config('log-shipper.api_key');
         $enabled = config('log-shipper.enabled', true);
 
+        // These run every minute or for days; repeating the warning there only floods cron mail and worker logs.
+        // The command is the first argument that is not an option (artisan --env=x schedule:run)
+        $command = '';
+        foreach (array_slice($_SERVER['argv'] ?? [], 1) as $arg) {
+            if (!str_starts_with((string) $arg, '-')) {
+                $command = (string) $arg;
+
+                break;
+            }
+        }
+        $quiet = ['schedule:run', 'schedule:work', 'queue:work', 'queue:listen', 'horizon', 'log-shipper:status', 'log-shipper:ship-batch'];
+        if (in_array($command, $quiet, true) || str_starts_with($command, 'horizon:')) {
+            return;
+        }
+
         if ($enabled && (empty($endpoint) || empty($apiKey))) {
             $missing = [];
             if (empty($endpoint)) {
@@ -122,12 +138,9 @@ class LogShipperServiceProvider extends ServiceProvider
             }
 
             $this->app->booted(function () use ($missing) {
-                $this->commands([]);
-                if (class_exists(Command::class)) {
-                    Log::channel('stderr')->warning(
-                        '[Log Shipper] Missing configuration: ' . implode(', ', $missing) . '. Log shipping is disabled until configured.'
-                    );
-                }
+                Log::channel('stderr')->warning(
+                    '[Log Shipper] Missing configuration: ' . implode(', ', $missing) . '. Log shipping is disabled until configured.'
+                );
             });
         }
     }
