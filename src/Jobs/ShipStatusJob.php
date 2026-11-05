@@ -15,6 +15,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -112,13 +113,13 @@ class ShipStatusJob implements ShouldQueue
         }
 
         if (config('log-shipper.status.metrics.dependency_checks', false)) {
-            $metrics['composer_outdated'] = $this->getComposerOutdatedCount();
-            $metrics['npm_outdated'] = $this->getNpmOutdatedCount();
+            $metrics['composer_outdated'] = $this->cachedCount('composer_outdated', 'composer.lock', fn () => $this->getComposerOutdatedCount());
+            $metrics['npm_outdated'] = $this->cachedCount('npm_outdated', 'package-lock.json', fn () => $this->getNpmOutdatedCount());
         }
 
         if (config('log-shipper.status.metrics.security_audits', false)) {
-            $metrics['composer_audit'] = $this->getComposerAuditCount();
-            $metrics['npm_audit'] = $this->getNpmAuditCount();
+            $metrics['composer_audit'] = $this->cachedCount('composer_audit', 'composer.lock', fn () => $this->getComposerAuditCount());
+            $metrics['npm_audit'] = $this->cachedCount('npm_audit', 'package-lock.json', fn () => $this->getNpmAuditCount());
         }
 
         return $metrics;
@@ -353,6 +354,46 @@ class ShipStatusJob implements ShouldQueue
         } catch (Throwable) {
             return null;
         }
+    }
+
+    /**
+     * The dependency checks shell out for up to 30 s each, so their results are
+     * kept for `status.dependency_cache_ttl` minutes. The key carries the lock
+     * file's mtime: a deploy that changes the lock file gets fresh numbers on
+     * the next push. Null (check failed) is never stored, so it is retried.
+     */
+    protected function cachedCount(string $name, string $lockFile, callable $check): ?int
+    {
+        $ttl = (int) config('log-shipper.status.dependency_cache_ttl', 60);
+
+        if ($ttl <= 0) {
+            return $check();
+        }
+
+        $lockPath = base_path($lockFile);
+        $key = 'log_shipper:status:' . $name . ':' . md5(base_path() . '|' . (@filemtime($lockPath) ?: 0));
+
+        try {
+            $cached = Cache::get($key);
+        } catch (Throwable) {
+            return $check();
+        }
+
+        if ($cached !== null) {
+            return (int) $cached;
+        }
+
+        $value = $check();
+
+        if ($value !== null) {
+            try {
+                Cache::put($key, $value, now()->addMinutes($ttl));
+            } catch (Throwable) {
+                // Cache down: the value is still sent, only the next push runs the check again
+            }
+        }
+
+        return $value;
     }
 
     /**

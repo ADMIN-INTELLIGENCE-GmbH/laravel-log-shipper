@@ -6,6 +6,7 @@ use AdminIntelligence\LogShipper\Jobs\ShipStatusJob;
 use AdminIntelligence\LogShipper\Tests\Support\FakeCommandRunner;
 use AdminIntelligence\LogShipper\Tests\Support\TestableShipStatusJob;
 use AdminIntelligence\LogShipper\Tests\TestCase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -662,5 +663,124 @@ class ShipStatusJobTest extends TestCase
             $this->assertStringStartsWith('exec ', $runner->commands[$i]);
             $this->assertSame($dir, $runner->cwds[$i]);
         }
+    }
+
+    /**
+     * Runs the status job $times times in one app dir and returns the runner.
+     */
+    private function shipDependencyChecksRepeatedly(FakeCommandRunner $runner, int $times, array $config = [], ?callable $between = null): FakeCommandRunner
+    {
+        $dir = sys_get_temp_dir() . '/log-shipper-deps-' . uniqid();
+        mkdir($dir);
+        file_put_contents($dir . '/package.json', '{}');
+        file_put_contents($dir . '/composer.lock', '{}');
+        $this->app->setBasePath($dir);
+
+        Http::fake(['*' => Http::response(['status' => 'ok'], 200)]);
+        $this->minimalStatusConfig(array_merge([
+            'log-shipper.api_endpoint' => 'https://logs.example.com/api/ingest',
+            'log-shipper.status.metrics.system' => true,
+            'log-shipper.status.metrics.dependency_checks' => true,
+            'log-shipper.status.metrics.security_audits' => true,
+        ], $config));
+
+        try {
+            for ($i = 0; $i < $times; $i++) {
+                if ($i > 0 && $between) {
+                    $between($dir);
+                }
+                $job = new TestableShipStatusJob;
+                $job->fakeRunner = $runner;
+                $job->handle();
+            }
+        } finally {
+            array_map('unlink', glob($dir . '/*'));
+            rmdir($dir);
+        }
+
+        return $runner;
+    }
+
+    private function countDependencyCommands(FakeCommandRunner $runner): int
+    {
+        return count(array_filter($runner->commands, fn ($c) => preg_match('/(composer|npm) (outdated|audit)/', $c)));
+    }
+
+    private function succeedingDependencyRunner(): FakeCommandRunner
+    {
+        return new FakeCommandRunner([
+            'composer outdated' => '{"installed": [{"name": "a/b"}]}',
+            'npm outdated' => '{}',
+            'composer audit' => '{"advisories": []}',
+            'npm audit' => '{"metadata": {"vulnerabilities": {"high": 1}}}',
+        ]);
+    }
+
+    #[Test]
+    public function it_reuses_dependency_results_between_pushes(): void
+    {
+        $runner = $this->shipDependencyChecksRepeatedly($this->succeedingDependencyRunner(), 2);
+
+        $this->assertSame(4, $this->countDependencyCommands($runner));
+
+        $pushes = [];
+        Http::assertSent(function ($request) use (&$pushes) {
+            $pushes[] = $request->data()['system'];
+
+            return true;
+        });
+        $this->assertCount(2, $pushes);
+        foreach ($pushes as $data) {
+            $this->assertSame(1, $data['composer_outdated']);
+            $this->assertSame(0, $data['npm_outdated']);
+            $this->assertSame(0, $data['composer_audit']);
+            $this->assertSame(1, $data['npm_audit']);
+        }
+    }
+
+    #[Test]
+    public function it_runs_dependency_checks_every_push_when_the_cache_ttl_is_zero(): void
+    {
+        $runner = $this->shipDependencyChecksRepeatedly($this->succeedingDependencyRunner(), 2, ['log-shipper.status.dependency_cache_ttl' => 0]);
+
+        $this->assertSame(8, $this->countDependencyCommands($runner));
+    }
+
+    #[Test]
+    public function it_reruns_composer_checks_when_the_lock_file_changes(): void
+    {
+        $runner = $this->shipDependencyChecksRepeatedly($this->succeedingDependencyRunner(), 2, [], function (string $dir) {
+            touch($dir . '/composer.lock', time() + 60);
+            clearstatcache();
+        });
+
+        $composer = array_filter($runner->commands, fn ($c) => preg_match('/composer (outdated|audit)/', $c));
+        $npm = array_filter($runner->commands, fn ($c) => preg_match('/npm (outdated|audit)/', $c));
+        $this->assertCount(4, $composer);
+        $this->assertCount(2, $npm);
+    }
+
+    #[Test]
+    public function it_does_not_cache_failed_dependency_checks(): void
+    {
+        $runner = $this->shipDependencyChecksRepeatedly(new FakeCommandRunner([
+            'composer outdated' => '',
+            'npm outdated' => 'not json',
+            'composer audit' => '{"unexpected": true}',
+            'npm audit' => '{"error": {"code": "ENOLOCK"}}',
+        ]), 2);
+
+        $this->assertSame(8, $this->countDependencyCommands($runner));
+    }
+
+    #[Test]
+    public function it_still_sends_dependency_counts_when_the_cache_is_down(): void
+    {
+        Cache::shouldReceive('get')->andThrow(new \RuntimeException('cache down'));
+
+        $runner = $this->shipDependencyChecksRepeatedly($this->succeedingDependencyRunner(), 1);
+
+        $this->assertSame(4, $this->countDependencyCommands($runner));
+        Http::assertSent(fn ($request) => $request->data()['system']['npm_audit'] === 1);
     }
 }

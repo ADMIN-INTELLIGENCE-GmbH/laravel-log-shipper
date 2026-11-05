@@ -205,6 +205,11 @@ return [
         'queue_connection' => env('LOG_SHIPPER_STATUS_QUEUE', 'default'),
         'queue_name' => env('LOG_SHIPPER_STATUS_QUEUE_NAME', 'default'),
 
+        // Minutes the dependency_checks / security_audits results are reused
+        // between pushes. A changed composer.lock / package-lock.json starts
+        // fresh. 0 runs the commands on every push.
+        'dependency_cache_ttl' => env('LOG_SHIPPER_DEPENDENCY_CACHE_TTL', 60),
+
         'metrics' => [
             'system' => true,
             'queue' => true,

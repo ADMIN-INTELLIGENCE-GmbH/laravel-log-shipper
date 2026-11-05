@@ -74,6 +74,7 @@ php artisan vendor:publish --tag=log-shipper-config --force
 - `status.metrics.node_npm` - Node.js and npm version detection
 - `status.metrics.dependency_checks` - Outdated package detection
 - `status.metrics.security_audits` - Security vulnerability scanning
+- `status.dependency_cache_ttl` - Minutes the dependency/audit results are reused between pushes (default 60, `0` = every push)
 - `status.monitored_folders` - Folders to monitor for size metrics
 - `status.metrics.os` - Operating system identity (distribution, version, kernel, architecture)
 - `status.metrics.host` - Host runtime details (hostname, timezone, PHP SAPI, extensions)
@@ -208,6 +209,7 @@ Add the following to your `.env` file:
 LOG_SHIPPER_STATUS_ENABLED=true
 LOG_SHIPPER_STATUS_ENDPOINT=https://your-log-server.com/api/stats
 LOG_SHIPPER_STATUS_INTERVAL=5 # minutes (default: 5)
+LOG_SHIPPER_DEPENDENCY_CACHE_TTL=60 # minutes dependency/audit results are reused (default: 60, 0 = every push)
 ```
 
 You can also configure the disk path to monitor:
@@ -504,7 +506,7 @@ To configure which metrics are sent or to monitor specific files/folders, publis
 ],
 ```
 
-> **Performance Note:** The optional metrics (`dependency_checks`, `security_audits`, `system_updates`) can be slow as they execute shell commands. Enable these only if you need them and have increased the job timeout accordingly (default: 120 seconds). `os` and `host` are cheap — a file read and pure PHP respectively.
+> **Performance Note:** The optional metrics (`dependency_checks`, `security_audits`, `system_updates`) can be slow as they execute shell commands. Enable these only if you need them and have increased the job timeout accordingly (default: 120 seconds). The `dependency_checks` and `security_audits` results are cached for `status.dependency_cache_ttl` minutes (default 60), so only one push per hour pays for them, or the first push after the lock file changes. `os` and `host` are cheap — a file read and pure PHP respectively.
 
 > **Note:** Status pushing relies on Laravel's scheduler. Ensure you have the scheduler running:
 > `* * * * * cd /path-to-your-project && php artisan schedule:run >> /dev/null 2>&1`
