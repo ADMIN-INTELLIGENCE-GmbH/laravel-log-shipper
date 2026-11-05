@@ -783,4 +783,31 @@ class ShipStatusJobTest extends TestCase
         $this->assertSame(4, $this->countDependencyCommands($runner));
         Http::assertSent(fn ($request) => $request->data()['system']['npm_audit'] === 1);
     }
+
+    #[Test]
+    public function it_gives_composer_a_home_when_the_worker_has_none(): void
+    {
+        $home = getenv('HOME');
+        $composerHome = getenv('COMPOSER_HOME');
+        putenv('HOME');
+        putenv('COMPOSER_HOME');
+
+        try {
+            $runner = $this->shipDependencyChecksRepeatedly($this->succeedingDependencyRunner(), 1);
+        } finally {
+            $home === false ? putenv('HOME') : putenv("HOME={$home}");
+            $composerHome === false ? putenv('COMPOSER_HOME') : putenv("COMPOSER_HOME={$composerHome}");
+        }
+
+        $composer = array_values(array_filter($runner->commands, fn ($c) => str_contains($c, 'composer ')));
+        $this->assertCount(2, $composer);
+        foreach ($composer as $command) {
+            $this->assertStringStartsWith('COMPOSER_HOME=' . escapeshellarg(storage_path('framework/cache/composer')) . ' exec composer ', $command);
+        }
+
+        $npm = array_values(array_filter($runner->commands, fn ($c) => preg_match('/npm (outdated|audit)/', $c)));
+        foreach ($npm as $command) {
+            $this->assertStringStartsWith('exec npm ', $command);
+        }
+    }
 }

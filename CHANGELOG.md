@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Composer checks reported null under supervisor**: queue workers started by supervisor often have no `HOME`, and composer then exits with "The HOME or COMPOSER_HOME environment variable must be set", so `composer_outdated` and `composer_audit` were always `null`. When neither variable is set, the composer calls now get `COMPOSER_HOME=storage/framework/cache/composer`.
 - **Status push reached a 404 on the default endpoint**: without `LOG_SHIPPER_STATUS_ENDPOINT`, the status URL was derived as `<api_endpoint>/status`, i.e. `/api/ingest/status`, which the log server does not serve (status lives at `/api/stats`). The response was never checked, so the push failed silently on every install that relied on the default. An endpoint ending in `/ingest` now maps to `/stats`; any other endpoint keeps the old `/status` suffix.
 - **Status push failures are visible**: a non-2xx response or a transport error now writes a `[Log Shipper] Status push failed: ...` warning to the local log. The line carries `log_shipper_failure` in its context, so the shipper handler does not ship it (no loop).
 - **Queue metric failed with `queue_connection = 'default'`**: `ShipStatusJob::getQueueMetrics()` passed `'default'` straight to `Queue::connection()` and reported "Could not fetch queue metrics". It now maps `'default'` to `queue.default`, the same way the commands already did.

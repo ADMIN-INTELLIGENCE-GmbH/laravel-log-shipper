@@ -409,7 +409,7 @@ class ShipStatusJob implements ShouldQueue
                 return null;
             }
 
-            $output = $this->runCommandWithTimeout('exec composer outdated --direct --format=json 2>/dev/null', 30, $basePath);
+            $output = $this->runCommandWithTimeout($this->composerEnv() . 'exec composer outdated --direct --format=json 2>/dev/null', 30, $basePath);
 
             if (!$output) {
                 return null;
@@ -421,6 +421,19 @@ class ShipStatusJob implements ShouldQueue
         } catch (Throwable) {
             return null;
         }
+    }
+
+    /**
+     * Composer refuses to run without HOME or COMPOSER_HOME, and queue workers
+     * started by supervisor often have neither. Point it at the app's cache dir.
+     */
+    protected function composerEnv(): string
+    {
+        if (getenv('HOME') || getenv('COMPOSER_HOME')) {
+            return '';
+        }
+
+        return 'COMPOSER_HOME=' . escapeshellarg(storage_path('framework/cache/composer')) . ' ';
     }
 
     protected function getNpmOutdatedCount(): ?int
@@ -456,7 +469,7 @@ class ShipStatusJob implements ShouldQueue
                 return null;
             }
 
-            $output = $this->runCommandWithTimeout('exec composer audit --format=json 2>/dev/null', 30, $basePath);
+            $output = $this->runCommandWithTimeout($this->composerEnv() . 'exec composer audit --format=json 2>/dev/null', 30, $basePath);
 
             if (!$output) {
                 return null;
