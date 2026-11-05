@@ -133,9 +133,10 @@ class CommandRunnerTest extends TestCase
         $runner->run('exec sleep 43.217 2>/dev/null', 1, sys_get_temp_dir());
         usleep(200000);
 
-        $leftover = trim((string) shell_exec('pgrep -f "sleep 43.217"'));
+        // [p] keeps the pattern from matching the sh -c wrapper of shell_exec itself (dash on Linux keeps it alive)
+        $leftover = trim((string) shell_exec('pgrep -f "slee[p] 43.217"'));
         if ($leftover !== '') {
-            shell_exec('pkill -f "sleep 43.217"');
+            shell_exec('pkill -f "slee[p] 43.217"');
         }
 
         $this->assertSame('', $leftover, 'sleep survived the timeout');
