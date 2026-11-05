@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Timed-out composer/npm checks left orphans**: the timeout only killed the `sh` wrapper of `cd X && ...`. Commands now run with the working directory passed to `proc_open` and start with `exec`, so the timeout kills the binary itself.
 
 ### Changed
+- **Laravel 10 and 11 dropped, PHP 8.2+ required**: both Laravel lines are end-of-life and every remaining 10.x/11.x release carries security advisories, so Composer's default `audit.block-insecure` refuses to install them. Supported now: Laravel 12 and 13 on PHP 8.2 to 8.5 (Laravel 13 needs 8.3+).
 - **Guzzle 8 allowed**: `guzzlehttp/guzzle` constraint widened to `^7.0|^8.0`. Fresh Laravel installs resolve Guzzle 8 and could not install the package before. Test suite green on 7.16.1 and 8.3.1.
 - **401, 403 and 404 count toward the circuit breaker**: they still fail the job without retry, but a wrong project key or endpoint now trips the breaker instead of queuing doomed jobs forever. 413 and 422 (payload problems) do not count.
 - **One sanitizer**: `AdminIntelligence\LogShipper\Utils\Sanitizer` is used by both the log handler and `ShipLogJob::failed()`. The job's looser copy (plain substring match, context only) is gone; the fallback channel now gets the same redaction as the log server, including the URL fields. The protected `LogShipperHandler::sanitizeRecursive()` and `isSensitiveKey()` were removed.
@@ -58,6 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **DB credentials in the status payload**: on a database connection failure the payload carried the raw driver message, which can contain the DB user and host. It now sends only the exception class plus SQLSTATE and driver error code, e.g. `PDOException SQLSTATE[HY000] [1045]`.
 
 ### Upgrade Notes
+- **Laravel 10/11 apps stay on 1.5.x.** Composer will not offer 1.6.0 to them; upgrade the app to Laravel 12+ first.
 - **Dependency checks and security audits are off by default.** Apps that relied on the previous config default get no `composer_outdated` / `npm_outdated` / `composer_audit` / `npm_audit` values until `status.metrics.dependency_checks` / `status.metrics.security_audits` are set to `true`.
 - **Dependency counters can be `null`.** Consumers of the status payload must treat `null` as "check could not run", not as 0.
 - **4xx responses are no longer retried**, except 429. 401, 403 and 404 now count toward the circuit breaker; with a wrong key or endpoint, shipping pauses and logs go to `fallback_channel`.

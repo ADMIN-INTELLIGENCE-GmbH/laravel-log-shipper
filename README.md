@@ -22,8 +22,8 @@ This package is designed to work with [**Logger**](https://github.com/ADMIN-INTE
 
 ## Requirements
 
-- PHP 8.1 or higher
-- Laravel 10, 11, 12, or 13
+- PHP 8.2 or higher
+- Laravel 12 or 13
 - A queue driver (recommended: Redis, database, or SQS)
 
 ## Installation
